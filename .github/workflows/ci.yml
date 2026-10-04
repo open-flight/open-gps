@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  # Plays a scripted round through the real firmware against stubbed hardware.
+  sim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run host simulation
+        run: make -C firmware/test
+
+  # Compiles the sketch for the Thing Plus ESP32-S3 with the pinned core and libraries.
+  firmware:
+    runs-on: ubuntu-latest
+    env:
+      ESP32_CORE: esp32:esp32@3.3.12
+      FQBN: esp32:esp32:sparkfun_esp32s3_thing_plus:CDCOnBoot=cdc,PartitionScheme=default
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries
+          key: arduino-${{ env.ESP32_CORE }}-libs-v1
+      - name: Install ESP32 core and libraries
+        run: |
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install "$ESP32_CORE"
+          arduino-cli lib install "SparkFun u-blox GNSS v3@3.1.15" "SparkFun Qwiic OLED Arduino Library@1.0.15" \
+            "SparkFun Qwiic Twist Arduino Library@1.0.4" "SparkFun MAX1704x Fuel Gauge Arduino Library@1.0.4"
+      - name: Compile
+        run: arduino-cli compile -b "$FQBN" --warnings default firmware/shot_tracker
