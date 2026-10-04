@@ -1,0 +1,4 @@
+#!/bin/sh
+# Stand-in for Arduino's x86-only ctags on Apple Silicon Macs without Rosetta.
+# shot_tracker.ino has no functions, so prototype generation has nothing to do.
+exit 0
