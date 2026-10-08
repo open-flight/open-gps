@@ -61,7 +61,7 @@ There's one control, the dial:
 | `rm <id>` | Delete a round |
 | `gps` | Current fix |
 
-For a quick satellite view, paste the `geojson` output into geojson.io and switch the base layer to Satellite. That's a stand-in until a proper viewer exists.
+To replay a round on a satellite map, save the `geojson` or `csv` output to a file and open it in the round replay viewer: open [`tools/replay/index.html`](../tools/replay/index.html) in a browser (straight from disk is fine) and drop the file on it. It walks through the round shot by shot with a scorecard and per-club stats. See [`tools/replay/README.md`](../tools/replay/README.md). The CSV is the complete record: the GeoJSON leaves out shots saved without GPS.
 
 ## Power
 

@@ -3,3 +3,4 @@ firmware/test/sim
 firmware/test/sim.dSYM/
 firmware/test/round1.geojson
 build/
+rounds/
