@@ -5,6 +5,35 @@
 #include "config.h"
 #include "model.h"
 
+// The u-blox library reads the module's "bytes waiting" count (registers 0xFD/0xFE)
+// and then reads that many bytes. Now and then the count comes back corrupted (the
+// library notes this too) as tens of thousands of bytes, and reading them all ties up
+// the loop for about a second at 400 kHz: no dial, no clicks, no redraw, plus checksum
+// errors from parsing the junk. Real backlogs are ~100 bytes per fix, so clamp the
+// count. A genuine large backlog still drains, just over a few polls.
+constexpr uint16_t GPS_MAX_READ_BYTES = 512;
+
+class ClampedI2C : public SparkFun_UBLOX_GNSS::SfeI2C {
+ public:
+  uint16_t available() override {
+    uint16_t n = SfeI2C::available();
+    return n > GPS_MAX_READ_BYTES ? GPS_MAX_READ_BYTES : n;
+  }
+};
+
+class Gnss : public DevUBLOXGNSS {
+ public:
+  Gnss() { _commType = COMM_TYPE_I2C; }
+  bool begin(TwoWire& wire) {
+    setCommunicationBus(bus_);
+    bus_.init(wire, kUBLOXGNSSDefaultAddress);
+    return init(kUBLOXGNSSDefaultMaxWait, false);
+  }
+
+ private:
+  ClampedI2C bus_;
+};
+
 // Wraps the NEO-M9N. Call poll() every loop. Marking a point averages every good
 // fix over GPS_MARK_WINDOW_MS, which noticeably tightens the position vs one fix.
 class Gps {
@@ -85,7 +114,7 @@ class Gps {
   void cancelMark() { marking_ = false; }
 
  private:
-  SFE_UBLOX_GNSS gnss_;
+  Gnss gnss_;
   bool present_ = false;
   Fix last_;
   bool marking_ = false;
