@@ -4,7 +4,7 @@
 #include "SparkFun_Qwiic_OLED.h"
 uint32_t g_millis = 1000; Stream Serial; TwoWire Wire; MemFS g_fs; LittleFSC LittleFS; bool g_slept=false;
 int16_t g_twistDiff=0; bool g_twistDown=false; double g_lat=47.600000, g_lon=-122.300000; bool g_fix=true; uint32_t g_lastPvt=0;
-QwiicFont F5{5},F8{8},FL{12}; std::string g_screen;
+float g_vcell=3.90f, g_crate=0; QwiicFont F5{5},F8{8},FL{12}; std::string g_screen;
 #include "../shot_tracker/app.cpp"
 
 static const char* scrName(){ const char* n[]={"Home","Club","Mark","Flight","Result","Menu","Holes","Confirm","Score","GpsInfo"}; return n[(int)scr]; }
@@ -94,6 +94,16 @@ int main(){
   size_t p=Serial.out.find("{\"type\""); std::string js=Serial.out.substr(p); js=js.substr(0,js.find('\n'));
   FILE* f=fopen("round1.geojson","w"); fputs(js.c_str(),f); fclose(f);
   Serial.out.clear(); Serial.in="csv 1\n"; step(50); printf("%s",Serial.out.c_str());
+  // Charging icon follows plug/unplug within a couple of seconds, even while the
+  // gauge's charge rate still lags the other way
+  expect(!charging,"not charging on battery");
+  g_vcell=3.97f; step(2100); expect(charging,"plug in: voltage step turns charging on");
+  g_crate=-3; step(5000); expect(charging,"lagging negative rate doesn't undo a fresh plug-in");
+  g_crate=12; g_vcell=4.00f; step(20000); expect(charging,"stays charging as voltage creeps up");
+  g_vcell=3.93f; step(2100); expect(!charging,"unplug: voltage drop turns charging off");
+  step(60000); expect(!charging,"lagging positive rate doesn't undo a fresh unplug");
+  step(CHG_SETTLE_MS); expect(charging,"settled rate is trusted again");
+  g_crate=-3; step(2000); expect(!charging,"settled negative rate = not charging");
   // power off
   try { pick("Power off"); } catch(int) { expect(g_slept,"power off enters deep sleep"); }
   printf("\n%d failures\n", fails);
