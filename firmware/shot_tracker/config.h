@@ -10,6 +10,20 @@ constexpr int PIN_SCL = 9;
 constexpr uint32_t I2C_HZ = 400000;
 
 // ---------------------------------------------------------------------------
+// Battery (MAX17048 fuel gauge)
+// ---------------------------------------------------------------------------
+constexpr uint32_t FUEL_POLL_MS = 1000;
+// Plugging in steps the cell voltage up by charge current x internal resistance
+// (typically 50-100 mV) and unplugging steps it back down. A jump this big
+// against the recent baseline flips the charging icon immediately.
+constexpr float CHG_STEP_V = 0.030f;
+// With no step seen for CHG_SETTLE_MS, fall back to the gauge's charge rate
+// (%/hr). It's heavily filtered, so it's only trusted once it has settled.
+constexpr float CHG_RATE_ON = 1.0f;
+constexpr float CHG_RATE_OFF = -1.0f;
+constexpr uint32_t CHG_SETTLE_MS = 5UL * 60 * 1000;
+
+// ---------------------------------------------------------------------------
 // Round
 // ---------------------------------------------------------------------------
 constexpr uint8_t NUM_HOLES = 18;

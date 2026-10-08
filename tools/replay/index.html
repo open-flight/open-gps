@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Round Replay</title>
+<meta name="description" content="Replay a round exported from the open-gps shot tracker (GeoJSON or CSV) on a satellite map.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css"
+      integrity="sha512-Zcn6bjR/8RZbLEpLIeOwNtzREBAJnUKESxces60Mpoj+2okopSAcSUIUOseddDm0cxnGQzxIR7vJgsLZbdLE3w=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
+<style>
+:root {
+  --bg: #f4f5f2;
+  --surface: #ffffff;
+  --surface-2: #eef0ec;
+  --text: #1b1f1c;
+  --muted: #5d665f;
+  --border: #d9ddd6;
+  --accent: #1f7a46;
+  --accent-text: #ffffff;
+  --accent-soft: #dcefe3;
+  --warn-bg: #fff4d6;
+  --warn-text: #6b4e00;
+  --error-bg: #fde4e1;
+  --error-text: #8a1c12;
+  --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111412;
+    --surface: #1a1e1b;
+    --surface-2: #232825;
+    --text: #e7ebe7;
+    --muted: #9aa49c;
+    --border: #2f3531;
+    --accent: #4cc27f;
+    --accent-text: #08130c;
+    --accent-soft: #1d3326;
+    --warn-bg: #3a3112;
+    --warn-text: #f3d98a;
+    --error-bg: #3d1a17;
+    --error-text: #ffb4aa;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111412;
+  --surface: #1a1e1b;
+  --surface-2: #232825;
+  --text: #e7ebe7;
+  --muted: #9aa49c;
+  --border: #2f3531;
+  --accent: #4cc27f;
+  --accent-text: #08130c;
+  --accent-soft: #1d3326;
+  --warn-bg: #3a3112;
+  --warn-text: #f3d98a;
+  --error-bg: #3d1a17;
+  --error-text: #ffb4aa;
+  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  height: 100vh; height: 100dvh;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+button, select { font: inherit; color: inherit; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* App bar */
+.bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.bar h1 { font-size: 16px; margin: 0 auto 0 0; letter-spacing: .01em; }
+.bar h1 span { color: var(--muted); font-weight: 400; }
+.btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  min-height: 34px;
+  white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.06); background: var(--accent); }
+.btn:focus-visible, select:focus-visible, .dot:focus-visible, tr[tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+select {
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 8px; padding: 6px 8px; min-height: 34px;
+}
+
+/* Layout */
+main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0; }
+.stage { position: relative; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#map { flex: 1; min-height: 0; background: #1d241f; }
+.panel {
+  overflow: auto; background: var(--surface); border-left: 1px solid var(--border);
+  padding: 16px; display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Controls under the map */
+.controls {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 16px; background: var(--surface); border-top: 1px solid var(--border);
+}
+.controls .count { margin-left: auto; color: var(--muted); }
+.controls .btn.play { min-width: 76px; }
+.timeline { display: flex; flex-wrap: wrap; gap: 10px; padding: 8px 16px 10px; background: var(--surface); }
+.timeline .grp { display: flex; align-items: center; gap: 3px; }
+.timeline .grp b { font-size: 11px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+.dot {
+  width: 14px; height: 14px; border-radius: 50%; padding: 0; cursor: pointer;
+  border: 2px solid var(--muted); background: transparent;
+}
+.dot.putt { width: 10px; height: 10px; }
+.dot.past { background: var(--muted); }
+.dot.current { background: var(--accent); border-color: var(--accent); transform: scale(1.25); }
+.dot.nogps { border-style: dashed; }
+
+/* Empty state, drop overlay, errors */
+.empty {
+  position: absolute; inset: 0; display: grid; place-items: center; padding: 16px;
+  background: var(--bg); z-index: 500;
+}
+.empty[hidden] { display: none; }
+.empty .card {
+  max-width: 440px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; box-shadow: var(--shadow); text-align: center;
+}
+.empty h2 { margin: 0 0 6px; font-size: 18px; }
+.empty p { margin: 0 0 14px; color: var(--muted); }
+.empty .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.drop {
+  position: fixed; inset: 0; z-index: 2000; display: none; place-items: center;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 3px dashed var(--accent); font-size: 20px; font-weight: 600; color: var(--text);
+}
+.drop.on { display: grid; }
+.drop div { background: var(--surface); padding: 14px 20px; border-radius: 10px; box-shadow: var(--shadow); }
+.msg { border-radius: 8px; padding: 10px 12px; display: flex; gap: 8px; align-items: flex-start; }
+.msg.error { background: var(--error-bg); color: var(--error-text); }
+.msg.warn { background: var(--warn-bg); color: var(--warn-text); }
+.msg p { margin: 0; flex: 1; }
+.msg button { border: 0; background: none; cursor: pointer; padding: 0 4px; font-size: 16px; line-height: 1; }
+.mapnote {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 600;
+  background: rgba(17,20,18,.82); color: #fff; padding: 6px 12px; border-radius: 999px;
+  font-size: 13px; pointer-events: none; white-space: nowrap; max-width: calc(100% - 32px);
+  overflow: hidden; text-overflow: ellipsis; display: none;
+}
+.mapnote.on { display: block; }
+
+/* Panel content */
+.panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+.meta { color: var(--muted); font-size: 13px; }
+.shotcard { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; }
+.shotcard .top { display: flex; align-items: baseline; gap: 8px; }
+.shotcard .hole { font-size: 22px; font-weight: 700; }
+.shotcard .of { color: var(--muted); }
+.shotcard .club { font-size: 18px; font-weight: 600; margin: 4px 0 8px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; text-align: right; }
+.note { margin-top: 8px; font-size: 13px; color: var(--muted); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tfoot td { font-weight: 700; border-bottom: 0; }
+tbody tr[tabindex] { cursor: pointer; }
+tbody tr[tabindex]:hover { background: var(--surface-2); }
+tr.current td { background: var(--accent-soft); }
+.keys { color: var(--muted); font-size: 12px; }
+kbd { border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; font: 11px ui-monospace, monospace; background: var(--surface-2); }
+
+/* Leaflet bits */
+.tee-label {
+  background: #fff; color: #111; border: 2px solid #1f7a46; border-radius: 50%;
+  width: 22px !important; height: 22px !important; margin: -11px 0 0 -11px !important;
+  display: grid; place-items: center; font: 700 11px/1 system-ui, sans-serif;
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+.tee-label.current { background: #1f7a46; color: #fff; border-color: #fff; }
+.leaflet-container { font: inherit; }
+
+@media (max-width: 760px) {
+  body { height: auto; display: block; }
+  main { grid-template-columns: 1fr; }
+  .stage { min-height: 0; }
+  #map { flex: none; height: 56vh; height: 56svh; }
+  .panel { border-left: 0; border-top: 1px solid var(--border); overflow: visible; }
+  .controls .count { margin-left: 0; width: 100%; order: 10; }
+  .bar h1 span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot.current { transform: none; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <h1>Round Replay <span>· open-gps shot tracker</span></h1>
+  <button class="btn" id="btn-sample" type="button">Load sample</button>
+  <button class="btn primary" id="btn-open" type="button">Open file…</button>
+  <input type="file" id="file" accept=".geojson,.json,.csv,application/geo+json,application/json,text/csv" hidden>
+</header>
+
+<main>
+  <section class="stage" aria-label="Map and replay controls">
+    <div id="map" aria-label="Satellite map of the round"></div>
+    <div class="mapnote" id="mapnote" role="status"></div>
+    <div class="empty" id="empty">
+      <div class="card">
+        <h2>Replay a round</h2>
+        <p>Drop a <b>.geojson</b> or <b>.csv</b> export from the shot tracker here (from the <code>geojson &lt;id&gt;</code> or <code>csv &lt;id&gt;</code> serial commands), or pick a file.</p>
+        <div class="row">
+          <button class="btn primary" type="button" data-action="open">Open file…</button>
+          <button class="btn" type="button" data-action="sample">Load sample round</button>
+        </div>
+        <div id="empty-error" style="margin-top:14px"></div>
+      </div>
+    </div>
+    <div class="controls" id="controls">
+      <select id="hole-select" aria-label="Hole" disabled></select>
+      <button class="btn" id="btn-prev" type="button" disabled aria-label="Previous shot">‹ Prev</button>
+      <button class="btn play" id="btn-play" type="button" disabled>Play</button>
+      <button class="btn" id="btn-next" type="button" disabled aria-label="Next shot">Next ›</button>
+      <button class="btn" id="btn-overview" type="button" disabled>Overview</button>
+      <span class="count tabular" id="count"></span>
+    </div>
+    <div class="timeline" id="timeline" aria-label="Shots"></div>
+  </section>
+
+  <aside class="panel" id="panel" aria-live="polite">
+    <div id="messages"></div>
+    <div id="round-meta" class="meta">No round loaded.</div>
+    <section id="shot-section" hidden>
+      <h2>Current shot</h2>
+      <div class="shotcard" id="shotcard"></div>
+    </section>
+    <section id="score-section" hidden>
+      <h2>Scorecard</h2>
+      <table class="tabular" id="scorecard"></table>
+    </section>
+    <section id="club-section" hidden>
+      <h2>Clubs this round</h2>
+      <table class="tabular" id="clubs"></table>
+    </section>
+    <p class="keys">
+      <kbd>←</kbd> <kbd>→</kbd> shot · <kbd>↑</kbd> <kbd>↓</kbd> hole · <kbd>Space</kbd> play/pause · <kbd>O</kbd> overview
+    </p>
+  </aside>
+</main>
+
+<div class="drop" id="drop"><div>Drop a round file to load it</div></div>
+
+<!-- Sample round: samples/sample-round.geojson (5 holes, 18 shots; synthetic: a real round moved, rotated and re-timed). -->
+<script type="application/json" id="sample-round">{"type":"FeatureCollection","properties":{"round":1,"startUnix":0,"units":"yds"},"features":[{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.948,36.568],[-121.9462869,36.5691204]]},"properties":{"hole":1,"shot":1,"club":"Driver","distance":216,"putt":false,"startAccM":0.6,"endAccM":0.6,"startUnix":1780358400,"endUnix":1780358671}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9462839,36.5691179],[-121.9451152,36.5696874]]},"properties":{"hole":1,"shot":2,"club":"PW","distance":134,"putt":false,"startAccM":0.5,"endAccM":0.6,"startUnix":1780358693,"endUnix":1780358889}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9451368,36.569696]},"properties":{"hole":1,"shot":3,"club":"Putter","distance":-1,"putt":true,"startAccM":0.5,"endAccM":0.0,"startUnix":1780359020,"endUnix":0}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9451452,36.5697606]},"properties":{"hole":1,"shot":4,"club":"Putter","distance":-1,"putt":true,"startAccM":0.5,"endAccM":0.0,"startUnix":1780359031,"endUnix":0}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9439577,36.5699076],[-121.9420329,36.5709361]]},"properties":{"hole":2,"shot":1,"club":"4 Iron","distance":226,"putt":false,"startAccM":0.5,"endAccM":0.4,"startUnix":1780359122,"endUnix":1780359562}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9420359,36.5709372],[-121.9410039,36.5714473]]},"properties":{"hole":2,"shot":2,"club":"GW","distance":118,"putt":false,"startAccM":0.4,"endAccM":0.5,"startUnix":1780359597,"endUnix":1780359733}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9410032,36.5714503]},"properties":{"hole":2,"shot":3,"club":"Putter","distance":-1,"putt":true,"startAccM":0.5,"endAccM":0.0,"startUnix":1780359740,"endUnix":0}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.940924,36.5715549]},"properties":{"hole":2,"shot":4,"club":"Putter","distance":-1,"putt":true,"startAccM":0.4,"endAccM":0.0,"startUnix":1780359818,"endUnix":0}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9412278,36.5707028],[-121.9414299,36.5692838]]},"properties":{"hole":3,"shot":1,"club":"6 Iron","distance":174,"putt":false,"startAccM":0.4,"endAccM":0.4,"startUnix":1780360087,"endUnix":1780360652}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9414345,36.5692896]},"properties":{"hole":3,"shot":2,"club":"Putter","distance":-1,"putt":true,"startAccM":0.3,"endAccM":0.0,"startUnix":1780360692,"endUnix":0}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9409275,36.5685496],[-121.9400152,36.5706126]]},"properties":{"hole":4,"shot":1,"club":"Driver","distance":266,"putt":false,"startAccM":0.5,"endAccM":0.3,"startUnix":1780361005,"endUnix":1780361371}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.940012,36.5706117],[-121.9404911,36.5720328]]},"properties":{"hole":4,"shot":2,"club":"7 Iron","distance":179,"putt":false,"startAccM":0.4,"endAccM":0.5,"startUnix":1780361379,"endUnix":1780361588}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9404899,36.572029],[-121.94016,36.5719875]]},"properties":{"hole":4,"shot":3,"club":"LW","distance":33,"putt":false,"startAccM":0.5,"endAccM":0.4,"startUnix":1780361599,"endUnix":1780361658}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9401622,36.5719891]},"properties":{"hole":4,"shot":4,"club":"Putter","distance":-1,"putt":true,"startAccM":0.4,"endAccM":0.0,"startUnix":1780361664,"endUnix":0}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9393705,36.5727527],[-121.9395413,36.5703653]]},"properties":{"hole":5,"shot":1,"club":"Driver","distance":291,"putt":false,"startAccM":0.5,"endAccM":0.6,"startUnix":1780361833,"endUnix":1780362269}},{"type":"Feature","geometry":{"type":"LineString","coordinates":[[-121.9395289,36.570371],[-121.9398386,36.5693607]]},"properties":{"hole":5,"shot":2,"club":"GW","distance":127,"putt":false,"startAccM":0.5,"endAccM":0.6,"startUnix":1780362296,"endUnix":1780362402}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9398624,36.5693674]},"properties":{"hole":5,"shot":3,"club":"Putter","distance":-1,"putt":true,"startAccM":0.5,"endAccM":0.0,"startUnix":1780362443,"endUnix":0}},{"type":"Feature","geometry":{"type":"Point","coordinates":[-121.9398721,36.5693504]},"properties":{"hole":5,"shot":4,"club":"Putter","distance":-1,"putt":true,"startAccM":0.4,"endAccM":0.0,"startUnix":1780362515,"endUnix":0}}]}</script>
+
+<!--
+  Parser. Kept as a classic script (not an ES module) so the page works from file://.
+  tools/replay/parse.test.mjs extracts this block by its id and runs it in Node.
+-->
+<script id="replay-parser">
+var ReplayParse = (function () {
+  'use strict';
+
+  function friendly(msg) { var e = new Error(msg); e.friendly = true; return e; }
+
+  function num(v) {
+    if (v === undefined || v === null) return null;
+    var s = String(v).trim();
+    if (s === '') return null;
+    var n = Number(s);
+    return isFinite(n) ? n : null;
+  }
+  function int(v) { var n = num(v); return n === null ? null : Math.round(n); }
+  function unixOrNull(v) { var n = num(v); return n !== null && n > 0 ? n : null; }
+  function distOrNull(v) { var n = num(v); return n === null || n < 0 ? null : n; }
+  function truthy(v) { return v === true || v === 1 || v === '1' || v === 'true'; }
+
+  function point(lat, lon, acc) {
+    lat = num(lat); lon = num(lon);
+    if (lat === null || lon === null) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (lat === 0 && lon === 0) return null;
+    var a = num(acc);
+    return { lat: lat, lon: lon, acc: a !== null && a > 0 ? a : null };
+  }
+
+  function haversineM(a, b) {
+    var R = 6371000, toRad = Math.PI / 180;
+    var dLat = (b.lat - a.lat) * toRad, dLon = (b.lon - a.lon) * toRad;
+    var s = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(a.lat * toRad) * Math.cos(b.lat * toRad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+  }
+
+  function shot(o) {
+    return {
+      hole: o.hole, shot: o.shot, club: o.club || '?', putt: !!o.putt,
+      start: o.start || null, end: o.end || null,
+      distance: o.distance, startUnix: o.startUnix || null, endUnix: o.endUnix || null,
+      noGps: !o.start, inferred: !!o.inferred
+    };
+  }
+
+  // Serial captures often have a prompt or log lines around the export, so look for
+  // the JSON object / CSV header rather than requiring a clean file.
+  function detect(text) {
+    if (/^\s*hole\s*,\s*shot\s*,/im.test(text) && text.indexOf('FeatureCollection') === -1) return 'csv';
+    if (text.indexOf('{') !== -1) return 'geojson';
+    return null;
+  }
+
+  function parseGeoJSON(text) {
+    var a = text.indexOf('{'), b = text.lastIndexOf('}');
+    if (a === -1 || b <= a) throw friendly('This file isn\'t valid JSON: it looks cut off. Copy the whole serial output from { to }.');
+    var obj;
+    try { obj = JSON.parse(text.slice(a, b + 1)); }
+    catch (e) { throw friendly('This file isn\'t valid JSON (' + e.message + '). Was the serial output cut off?'); }
+    var features;
+    if (obj && obj.type === 'FeatureCollection' && Array.isArray(obj.features)) features = obj.features;
+    else if (obj && obj.type === 'Feature') features = [obj];
+    else throw friendly('This JSON isn\'t a GeoJSON FeatureCollection from the shot tracker.');
+
+    var props = obj.properties || {};
+    var warnings = [];
+    var shots = [];
+    var nextOnHole = {};   // hole -> next expected shot number
+    var skipped = 0, inferred = 0;
+
+    features.forEach(function (f) {
+      var p = (f && f.properties) || {};
+      var hole = int(p.hole);
+      if (!hole || hole < 1) { skipped++; return; }
+      var expected = nextOnHole[hole] || 1;
+      var n = int(p.shot);
+      if (!n || n < expected) n = expected;
+      // The firmware numbers shots per hole but leaves out shots saved without GPS,
+      // so a gap in numbering is a stroke with no position.
+      for (var k = expected; k < n; k++) {
+        shots.push(shot({ hole: hole, shot: k, club: '?', distance: null, inferred: true }));
+        inferred++;
+      }
+      nextOnHole[hole] = n + 1;
+
+      var g = f.geometry, start = null, end = null;
+      if (g && g.type === 'LineString' && Array.isArray(g.coordinates) && g.coordinates.length) {
+        var c0 = g.coordinates[0], c1 = g.coordinates[g.coordinates.length - 1];
+        start = c0 ? point(c0[1], c0[0], p.startAccM) : null;
+        end = g.coordinates.length > 1 && c1 ? point(c1[1], c1[0], p.endAccM) : null;
+      } else if (g && g.type === 'Point' && Array.isArray(g.coordinates)) {
+        start = point(g.coordinates[1], g.coordinates[0], p.startAccM);
+      }
+      shots.push(shot({
+        hole: hole, shot: n, club: p.club, putt: truthy(p.putt), start: start, end: end,
+        distance: distOrNull(p.distance), startUnix: unixOrNull(p.startUnix), endUnix: end ? unixOrNull(p.endUnix) : null
+      }));
+    });
+
+    if (skipped) warnings.push(skipped + ' feature(s) had no hole number and were ignored.');
+    if (inferred) warnings.push(inferred + ' shot(s) saved without GPS were inferred from gaps in the shot numbering. GeoJSON leaves those shots out, so one at the very end of a hole can\'t be detected. The CSV export has every stroke.');
+    var notes = inferred ? [] : ['GeoJSON leaves out shots saved without GPS, so a no-GPS last stroke on a hole wouldn\'t show here. The CSV export has every stroke.'];
+
+    return {
+      format: 'geojson',
+      roundId: props.round !== undefined ? props.round : null,
+      startUnix: unixOrNull(props.startUnix),
+      units: typeof props.units === 'string' && props.units ? props.units : 'yds',
+      unitsGuessed: typeof props.units !== 'string',
+      shots: shots, warnings: warnings, notes: notes
+    };
+  }
+
+  function parseCSV(text) {
+    var lines = text.split(/\r\n|\n|\r/);
+    var h = -1;
+    for (var i = 0; i < lines.length; i++) if (/^\s*hole\s*,\s*shot\s*,/i.test(lines[i])) { h = i; break; }
+    if (h === -1) throw friendly('This CSV has no "hole,shot,club,…" header row.');
+    var cols = lines[h].split(',').map(function (s) { return s.trim().toLowerCase(); });
+    function col(name) { return cols.indexOf(name); }
+    function cell(v, name) { var i = col(name); return i === -1 ? undefined : v[i]; }
+    var need = ['hole', 'shot', 'club', 'putt'];
+    need.forEach(function (n) { if (col(n) === -1) throw friendly('The CSV header is missing the "' + n + '" column.'); });
+
+    var shots = [], bad = 0;
+    for (var r = h + 1; r < lines.length; r++) {
+      var line = lines[r].trim();
+      if (!line) continue;
+      var v = line.split(',');
+      if (v.length < cols.length - 1 || int(v[col('hole')]) === null) { bad++; continue; }
+      var get = cell.bind(null, v);
+      var start = point(get('start_lat'), get('start_lon'), get('start_acc_m'));
+      var end = point(get('end_lat'), get('end_lon'), get('end_acc_m'));
+      shots.push(shot({
+        hole: int(get('hole')), shot: int(get('shot')), club: (get('club') || '').trim(),
+        putt: truthy((get('putt') || '').trim()), start: start, end: start ? end : null,
+        distance: distOrNull(get('distance')), startUnix: unixOrNull(get('start_unix')),
+        endUnix: end ? unixOrNull(get('end_unix')) : null
+      }));
+    }
+    var warnings = [];
+    if (bad) warnings.push(bad + ' line(s) after the header weren\'t shot rows and were ignored.');
+
+    // The CSV has no units column. The firmware rounds the start->landing distance in its
+    // display units, so compare a few shots with the great-circle distance to tell yds from m.
+    var ratios = shots.filter(function (s) { return s.start && s.end && s.distance > 20; })
+      .map(function (s) { return s.distance / haversineM(s.start, s.end); })
+      .sort(function (a, b) { return a - b; });
+    var units = 'yds', guessed = true;
+    if (ratios.length) { units = ratios[Math.floor(ratios.length / 2)] > 1.045 ? 'yds' : 'm'; guessed = false; }
+    return { format: 'csv', roundId: null, startUnix: null, units: units, unitsGuessed: guessed, shots: shots, warnings: warnings,
+      notes: guessed ? ['The CSV has no units column and no full shot to infer them from, so yards are assumed.'] : [] };
+  }
+
+  function finalize(round) {
+    var shots = round.shots;
+    if (!shots.length) throw friendly('No shots found in this file. Is the round empty?');
+    var holes = {};
+    shots.forEach(function (s, i) {
+      s.index = i;
+      var h = holes[s.hole] || (holes[s.hole] = { hole: s.hole, strokes: 0, putts: 0, noGps: 0, shots: [] });
+      h.strokes++; if (s.putt) h.putts++; if (s.noGps) h.noGps++;
+      h.shots.push(i);
+      s.n = h.shots.length;
+    });
+    shots.forEach(function (s, i) {
+      s.of = holes[s.hole].strokes;
+      // Where did the ball stop? Recorded landing, else the start of the next stroke on the
+      // same hole (putts never record a landing). The final putt has no known stop point:
+      // "Hole out" doesn't record a position.
+      var next = shots[i + 1];
+      s.restPoint = s.end || (next && next.hole === s.hole && next.start ? next.start : null);
+      s.restInferred = !s.end && !!s.restPoint;
+      s.holedOut = !s.end && s.n === s.of;
+      var prev = shots[i - 1];
+      s.sincePrev = prev && prev.startUnix && s.startUnix ? s.startUnix - prev.startUnix : null;
+    });
+    var holeList = Object.keys(holes).map(function (k) { return holes[k]; })
+      .sort(function (a, b) { return a.hole - b.hole; });
+    var times = shots.map(function (s) { return s.startUnix; }).filter(Boolean);
+    round.holes = holeList;
+    round.totalStrokes = shots.length;
+    round.totalPutts = shots.filter(function (s) { return s.putt; }).length;
+    round.firstUnix = round.startUnix || (times.length ? Math.min.apply(null, times) : null);
+    round.lastUnix = times.length ? Math.max.apply(null, times.concat(shots.map(function (s) { return s.endUnix || 0; }))) : null;
+    round.clubs = clubStats(shots);
+    return round;
+  }
+
+  function clubStats(shots) {
+    var by = {};
+    shots.forEach(function (s) {
+      if (s.inferred) return;
+      var c = by[s.club] || (by[s.club] = { club: s.club, count: 0, measured: 0, sum: 0, max: null, putt: true });
+      c.count++;
+      if (!s.putt) c.putt = false;
+      if (s.distance !== null && !s.putt) {
+        c.measured++; c.sum += s.distance;
+        c.max = c.max === null ? s.distance : Math.max(c.max, s.distance);
+      }
+    });
+    return Object.keys(by).map(function (k) {
+      var c = by[k]; c.avg = c.measured ? c.sum / c.measured : null; return c;
+    }).sort(function (a, b) {
+      if (a.putt !== b.putt) return a.putt ? 1 : -1;
+      return (b.max === null ? -1 : b.max) - (a.max === null ? -1 : a.max) || a.club.localeCompare(b.club);
+    });
+  }
+
+  function parse(text, filename) {
+    if (typeof text !== 'string' || !text.trim()) throw friendly('The file is empty.');
+    // Sniff the content rather than trusting the extension (serial captures get saved as .txt).
+    var kind = detect(text);
+    if (!kind) throw friendly('This doesn\'t look like a shot tracker export (GeoJSON or CSV).');
+    return finalize(kind === 'csv' ? parseCSV(text) : parseGeoJSON(text));
+  }
+
+  return { parse: parse, parseGeoJSON: parseGeoJSON, parseCSV: parseCSV, finalize: finalize, haversineM: haversineM };
+})();
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"
+        integrity="sha512-BwHfrr4c9kmRkLw6iXFdzcdWV/PGkVgiIyIWLLlTSXzWQzxuSg4DiQUCpauz/EWjgk5TYQqX/kvn9pG1NpYfqg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var reduceMotion = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var state = { round: null, idx: -1, playing: false, token: 0, timer: null };
+  var map = null, layers = null, anim = null, restBall = null, shotLayers = [], teeMarkers = {};
+
+  // ---------- formatting ----------
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function fmtTime(u) { return u ? new Date(u * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' }) : '—'; }
+  function fmtDate(u) { return u ? new Date(u * 1000).toLocaleDateString([], { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' }) : null; }
+  function fmtDur(s) {
+    if (s === null || s === undefined || s < 0) return '—';
+    s = Math.round(s);
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return h ? h + 'h ' + m + 'm' : m ? m + 'm ' + (r < 10 ? '0' : '') + r + 's' : r + 's';
+  }
+  function fmtDist(d) { return d === null || d === undefined ? '—' : Math.round(d) + ' ' + state.round.units; }
+  function fmtAcc(p) { return p && p.acc !== null ? '±' + p.acc.toFixed(1) + ' m' : '—'; }
+  function toDisplay(m) { return state.round.units === 'm' ? m : m * 1.0936133; }
+
+  // ---------- messages ----------
+  function showMessage(kind, text, target) {
+    var box = document.createElement('div');
+    box.className = 'msg ' + kind;
+    box.innerHTML = '<p></p><button type="button" aria-label="Dismiss">×</button>';
+    box.querySelector('p').textContent = text;
+    box.querySelector('button').onclick = function () { box.remove(); };
+    (target || $('messages')).appendChild(box);
+  }
+  function clearMessages() { $('messages').innerHTML = ''; $('empty-error').innerHTML = ''; }
+  var noteTimer = null;
+  function mapNote(text) {
+    var n = $('mapnote');
+    clearTimeout(noteTimer);
+    if (!text) { n.classList.remove('on'); return; }
+    n.textContent = text; n.classList.add('on');
+  }
+
+  // ---------- map ----------
+  function initMap() {
+    if (typeof L === 'undefined') {
+      showMessage('error', 'The map library (Leaflet) couldn\'t load. Are you offline? The scorecard and stats still work.');
+      return;
+    }
+    map = L.map('map', { zoomControl: true, attributionControl: true, maxZoom: 21 }).setView([36.570, -121.945], 15);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 21, maxNativeZoom: 19,
+      attribution: 'Imagery &copy; <a href="https://www.esri.com/">Esri</a>, Maxar, Earthstar Geographics, and the GIS User Community'
+    }).addTo(map);
+    L.control.scale({ imperial: true, metric: true }).addTo(map);
+    layers = L.layerGroup().addTo(map);
+  }
+  function ll(p) { return L.latLng(p.lat, p.lon); }
+
+  var STYLE = {
+    line:      { color: '#ffffff', weight: 3, opacity: 0.95 },
+    lineFaint: { color: '#ffffff', weight: 2, opacity: 0.35 },
+    lineInf:   { color: '#ffffff', weight: 2, opacity: 0.8, dashArray: '4 6' },
+    land:      { radius: 4, color: '#111', weight: 1, fillColor: '#ffffff', fillOpacity: 1 },
+    start:     { radius: 3, color: '#111', weight: 1, fillColor: '#cfd8d2', fillOpacity: 1 },
+    putt:      { radius: 4, color: '#111', weight: 1, fillColor: '#ffd84d', fillOpacity: 1 }
+  };
+
+  function buildLayers() {
+    if (!map) return;
+    layers.clearLayers(); shotLayers = []; teeMarkers = {};
+    var r = state.round;
+    r.shots.forEach(function (s) {
+      if (!s.start) { shotLayers.push(null); return; }
+      var g = L.layerGroup();
+      var line = null, endDot = null;
+      if (!s.putt && s.restPoint) {
+        line = L.polyline([ll(s.start), ll(s.restPoint)], s.restInferred ? STYLE.lineInf : STYLE.line).addTo(g);
+        if (s.end) endDot = L.circleMarker(ll(s.end), STYLE.land).addTo(g);
+      }
+      var startDot = L.circleMarker(ll(s.start), s.putt ? STYLE.putt : STYLE.start).addTo(g);
+      var tip = 'H' + s.hole + ' · shot ' + s.n + ' · ' + s.club + (s.distance !== null ? ' · ' + fmtDist(s.distance) : '');
+      startDot.bindTooltip(tip, { direction: 'top' });
+      startDot.on('click', function () { pause(); goTo(s.index); });
+      shotLayers.push({ group: g, line: line, startDot: startDot, endDot: endDot, shown: false });
+    });
+    r.holes.forEach(function (h) {
+      var first = null;
+      h.shots.some(function (i) { if (r.shots[i].start) { first = r.shots[i]; return true; } return false; });
+      if (!first) return;
+      var m = L.marker(ll(first.start), {
+        icon: L.divIcon({ className: 'tee-label', html: String(h.hole), iconSize: [22, 22] }),
+        keyboard: false, zIndexOffset: 500, title: 'Hole ' + h.hole
+      }).addTo(layers);
+      m.on('click', function () { pause(); goTo(first.index); });
+      teeMarkers[h.hole] = m;
+    });
+  }
+
+  // Shots before the current one are drawn (current hole bright, other holes faint);
+  // the current shot is drawn by the animation; later shots stay hidden.
+  function styleLayers(overview) {
+    if (!map) return;
+    var r = state.round, cur = r.shots[state.idx];
+    shotLayers.forEach(function (L_, i) {
+      if (!L_) return;
+      var s = r.shots[i];
+      var show = overview || i < state.idx || (i === state.idx && !anim);
+      if (show !== L_.shown) { if (show) L_.group.addTo(layers); else layers.removeLayer(L_.group); L_.shown = show; }
+      if (!show) return;
+      var bright = overview || (cur && s.hole === cur.hole);
+      if (L_.line) L_.line.setStyle(bright ? (s.restInferred ? STYLE.lineInf : STYLE.line) : STYLE.lineFaint);
+      [L_.startDot, L_.endDot].forEach(function (d) { if (d) d.setStyle({ opacity: bright ? 1 : 0.4, fillOpacity: bright ? 1 : 0.4 }); });
+    });
+    Object.keys(teeMarkers).forEach(function (h) {
+      var el = teeMarkers[h].getElement();
+      if (el) el.classList.toggle('current', !overview && cur && cur.hole === +h);
+    });
+  }
+
+  function allBounds() {
+    var pts = [];
+    state.round.shots.forEach(function (s) { if (s.start) pts.push(ll(s.start)); if (s.end) pts.push(ll(s.end)); });
+    return pts.length ? L.latLngBounds(pts) : null;
+  }
+
+  // Move the camera, then call cb once (on moveend, or after a timeout if nothing moved).
+  function camera(fn, cb) {
+    var done = false, t;
+    function go() { if (done) return; done = true; clearTimeout(t); map.off('moveend', go); cb(); }
+    map.on('moveend', go);
+    t = setTimeout(go, reduceMotion ? 60 : 1500);
+    fn();
+  }
+
+  // ---------- animation ----------
+  function stopAnim() {
+    if (restBall) { layers.removeLayer(restBall); restBall = null; }
+    if (!anim) return;
+    cancelAnimationFrame(anim.raf);
+    anim.layers.forEach(function (l) { layers.removeLayer(l); });
+    anim = null;
+  }
+
+  function lerp(a, b, t) { return L.latLng(a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t); }
+
+  // kind: 'flight' (arc with shadow and trail), 'roll' (straight, decelerating), 'pulse' (in place)
+  function animate(s, kind, token, done) {
+    var from = ll(s.start), to = s.restPoint ? ll(s.restPoint) : from;
+    var trail = L.polyline([], { color: '#ffffff', weight: 2.5, opacity: 0.9, interactive: false }).addTo(layers);
+    var shadow = L.circleMarker(from, { radius: 3, stroke: false, fillColor: '#000', fillOpacity: 0.45, interactive: false });
+    var ring = L.circleMarker(from, { radius: 8, color: '#ffd84d', weight: 2, fill: false, interactive: false });
+    var ball = L.circleMarker(from, { radius: 5, color: '#222', weight: 1, fillColor: '#ffffff', fillOpacity: 1, interactive: false });
+    if (kind === 'flight') shadow.addTo(layers);
+    if (kind === 'pulse') ring.addTo(layers);
+    ball.addTo(layers);
+    anim = { raf: 0, layers: [trail, shadow, ring, ball] };
+
+    var meters = s.restPoint ? L.latLng(from).distanceTo(to) : 0;
+    var dur = kind === 'flight' ? Math.min(2600, 900 + meters * 6) : kind === 'roll' ? Math.min(1800, 700 + meters * 60) : 1400;
+    if (reduceMotion) dur = 1;
+    var p0 = map.latLngToContainerPoint(from), p1 = map.latLngToContainerPoint(to);
+    var apex = Math.max(18, Math.min(150, p0.distanceTo(p1) * 0.3));
+    var t0 = performance.now();
+
+    function frame(now) {
+      if (token !== state.token) return;
+      var t = Math.min(1, (now - t0) / dur);
+      if (kind === 'flight') {
+        var e = 1 - Math.pow(1 - t, 1.5);
+        var ground = lerp(from, to, e);
+        var lift = 4 * apex * e * (1 - e);
+        var air = map.containerPointToLatLng(map.latLngToContainerPoint(ground).subtract([0, lift]));
+        shadow.setLatLng(ground); ball.setLatLng(air); trail.addLatLng(air);
+      } else if (kind === 'roll') {
+        var g = lerp(from, to, 1 - Math.pow(1 - t, 3));
+        ball.setLatLng(g); trail.addLatLng(g);
+      } else {
+        var w = Math.sin(t * Math.PI * 3);
+        ring.setRadius(8 + 10 * Math.abs(w)); ring.setStyle({ opacity: 1 - t * 0.6 });
+      }
+      if (t < 1) { anim.raf = requestAnimationFrame(frame); return; }
+      layers.removeLayer(shadow);
+      anim = { raf: 0, layers: [trail, ring, ball] };
+      done();
+    }
+    anim.raf = requestAnimationFrame(frame);
+  }
+
+  // ---------- navigation ----------
+  function goTo(i, opts) {
+    var r = state.round;
+    if (!r) return;
+    i = Math.max(0, Math.min(r.shots.length - 1, i));
+    var token = ++state.token;
+    clearTimeout(state.timer);
+    if (map) stopAnim();
+    state.idx = i;
+    var s = r.shots[i];
+    renderPanel(); renderTimeline(); syncControls();
+    if (!map) { afterShot(token); return; }
+    anim = { raf: 0, layers: [] }; // marks "current shot is being animated" for styleLayers
+    styleLayers(false);
+
+    if (!s.start) {
+      anim = null; styleLayers(false);
+      mapNote('Hole ' + s.hole + ', shot ' + s.n + ': saved without GPS (counts as a stroke)');
+      afterShot(token, 1600);
+      return;
+    }
+    mapNote(null);
+    var kind = !s.putt && s.restPoint ? 'flight' : s.restPoint ? 'roll' : 'pulse';
+    var start = ll(s.start);
+    camera(function () {
+      var opt = { animate: !reduceMotion && !(opts && opts.instant), duration: 0.9 };
+      if (kind === 'flight' || kind === 'roll') {
+        var b = L.latLngBounds([start, ll(s.restPoint)]);
+        var pad = kind === 'flight' ? 70 : 90;
+        if (opt.animate) map.flyToBounds(b, { padding: [pad, pad], maxZoom: kind === 'roll' ? 20 : 19, duration: 0.9 });
+        else map.fitBounds(b, { padding: [pad, pad], maxZoom: kind === 'roll' ? 20 : 19, animate: false });
+      } else {
+        var z = s.putt ? 20 : 18;
+        if (opt.animate) map.flyTo(start, z, { duration: 0.9 }); else map.setView(start, z, { animate: false });
+      }
+    }, function () {
+      if (token !== state.token) return;
+      anim = null;
+      animate(s, kind, token, function () {
+        if (token !== state.token) return;
+        if (kind === 'pulse') mapNote(s.putt && s.holedOut ? 'Last putt on hole ' + s.hole + ' (hole-out position isn\'t recorded)' : s.putt ? 'Putt' : 'No landing recorded for this shot');
+        stopAnim();
+        if (kind !== 'pulse') restBall = L.circleMarker(ll(s.restPoint), { radius: 5, color: '#222', weight: 1, fillColor: '#ffffff', fillOpacity: 1, interactive: false }).addTo(layers);
+        styleLayers(false);
+        afterShot(token);
+      });
+    });
+  }
+
+  function afterShot(token, delay) {
+    if (!state.playing || token !== state.token) return;
+    var r = state.round;
+    if (state.idx >= r.shots.length - 1) { pause(); return; }
+    var nextHole = r.shots[state.idx + 1].hole !== r.shots[state.idx].hole;
+    state.timer = setTimeout(function () {
+      if (state.playing && token === state.token) goTo(state.idx + 1);
+    }, delay || (nextHole ? 1800 : 900));
+  }
+
+  function play() {
+    if (!state.round) return;
+    state.playing = true; syncControls();
+    if (state.idx >= state.round.shots.length - 1) goTo(0); else goTo(state.idx + 1);
+  }
+  function pause() { state.playing = false; clearTimeout(state.timer); syncControls(); }
+  function toggle() { state.playing ? pause() : play(); }
+  function step(d) { pause(); goTo(state.idx + d); }
+  function stepHole(d) {
+    var r = state.round; if (!r) return;
+    var cur = r.shots[state.idx].hole;
+    var order = r.holes.map(function (h) { return h.hole; });
+    var k = order.indexOf(cur) + d;
+    if (k < 0 || k >= order.length) return;
+    pause(); goToHole(order[k]);
+  }
+  function goToHole(h) {
+    var hole = state.round.holes.filter(function (x) { return x.hole === h; })[0];
+    if (hole) goTo(hole.shots[0]);
+  }
+  function overview() {
+    if (!state.round || !map) return;
+    pause(); state.token++; stopAnim(); mapNote(null);
+    styleLayers(true);
+    var b = allBounds(); if (b) map.flyToBounds(b, { padding: [30, 30], duration: reduceMotion ? 0 : 0.9 });
+  }
+
+  // ---------- rendering ----------
+  function syncControls() {
+    var r = state.round, has = !!r;
+    ['btn-prev', 'btn-next', 'btn-play', 'btn-overview', 'hole-select'].forEach(function (id) { $(id).disabled = !has; });
+    if (!has) return;
+    $('btn-prev').disabled = state.idx <= 0;
+    $('btn-next').disabled = state.idx >= r.shots.length - 1;
+    $('btn-overview').disabled = !map;
+    $('btn-play').textContent = state.playing ? 'Pause' : 'Play';
+    $('btn-play').setAttribute('aria-pressed', state.playing ? 'true' : 'false');
+    var s = r.shots[state.idx];
+    if (s) $('hole-select').value = String(s.hole);
+    $('count').textContent = s ? 'Stroke ' + (state.idx + 1) + ' of ' + r.shots.length : '';
+  }
+
+  function renderTimeline() {
+    var r = state.round, tl = $('timeline');
+    if (!r) { tl.innerHTML = ''; return; }
+    if (!tl.childElementCount) {
+      r.holes.forEach(function (h) {
+        var grp = document.createElement('div'); grp.className = 'grp';
+        grp.innerHTML = '<b>' + h.hole + '</b>';
+        h.shots.forEach(function (i) {
+          var s = r.shots[i], d = document.createElement('button');
+          d.type = 'button';
+          d.className = 'dot' + (s.putt ? ' putt' : '') + (s.noGps ? ' nogps' : '');
+          d.dataset.i = i;
+          d.title = 'Hole ' + s.hole + ', shot ' + s.n + ': ' + s.club + (s.noGps ? ' (no GPS)' : '');
+          d.setAttribute('aria-label', d.title);
+          d.onclick = function () { pause(); goTo(i); };
+          grp.appendChild(d);
+        });
+        tl.appendChild(grp);
+      });
+    }
+    Array.prototype.forEach.call(tl.querySelectorAll('.dot'), function (d) {
+      var i = +d.dataset.i;
+      d.classList.toggle('past', i < state.idx);
+      d.classList.toggle('current', i === state.idx);
+      if (i === state.idx) d.setAttribute('aria-current', 'step'); else d.removeAttribute('aria-current');
+    });
+  }
+
+  function renderPanel() {
+    var r = state.round, s = r.shots[state.idx];
+    var date = fmtDate(r.firstUnix);
+    var span = r.firstUnix && r.lastUnix ? fmtDur(r.lastUnix - r.firstUnix) : null;
+    $('round-meta').innerHTML =
+      '<b>' + (r.roundId !== null ? 'Round #' + esc(r.roundId) : 'Round') + '</b>' +
+      (date ? ' · ' + esc(date) : '') + (span ? ' · ' + span + ' recorded' : '') +
+      '<br>' + r.holes.length + ' hole' + (r.holes.length === 1 ? '' : 's') + ' · ' + r.totalStrokes + ' strokes · ' +
+      esc(r.format.toUpperCase()) + ' · ' + esc(r.units) + (r.unitsGuessed ? ' (assumed)' : '') +
+      (state.fileName ? '<br>' + esc(state.fileName) : '') +
+      (r.notes || []).map(function (n) { return '<br><small>' + esc(n) + '</small>'; }).join('');
+
+    // Current shot
+    $('shot-section').hidden = false;
+    var dist, notes = [];
+    if (s.noGps) { dist = '—'; notes.push(s.inferred ? 'Saved without GPS: the GeoJSON export leaves it out, so it was inferred from the shot numbering. It still counts as a stroke.' : 'Saved without GPS: no position or distance, but it counts as a stroke.'); }
+    else if (s.putt) {
+      dist = s.restPoint ? '~' + Math.round(toDisplay(L_distance(s.start, s.restPoint))) + ' ' + r.units : '—';
+      notes.push(s.restPoint ? 'Putts record only where they were struck; the roll goes to where the next putt started.' : 'Final putt on the hole: the hole-out position isn\'t recorded, so it pulses in place.');
+    } else if (s.distance !== null) dist = fmtDist(s.distance);
+    else if (s.restPoint) { dist = '~' + Math.round(toDisplay(L_distance(s.start, s.restPoint))) + ' ' + r.units; notes.push('No landing was recorded; the dashed line goes to where the next shot started.'); }
+    else { dist = '—'; notes.push('No landing was recorded for this shot.'); }
+
+    var rows = [
+      ['Distance', dist],
+      ['GPS accuracy', s.noGps ? '—' : fmtAcc(s.start) + (s.end ? ' / ' + fmtAcc(s.end) : '')],
+      ['Struck at', fmtTime(s.startUnix)]
+    ];
+    if (s.end && s.endUnix) rows.push(['Landing marked', fmtTime(s.endUnix)]);
+    rows.push(['Since previous shot', fmtDur(s.sincePrev)]);
+    $('shotcard').innerHTML =
+      '<div class="top"><span class="hole">Hole ' + s.hole + '</span><span class="of">Shot ' + s.n + ' of ' + s.of + '</span></div>' +
+      '<div class="club">' + esc(s.club === '?' ? 'Unknown club' : s.club) + (s.putt ? ' · putt' : '') + '</div>' +
+      '<dl class="kv tabular">' + rows.map(function (kv) { return '<dt>' + kv[0] + '</dt><dd>' + esc(kv[1]) + '</dd>'; }).join('') + '</dl>' +
+      (notes.length ? '<div class="note">' + notes.map(esc).join('<br>') + '</div>' : '') +
+      (s.end && s.start ? '<div class="note">Accuracy is start / landing (horizontal, from the GPS).</div>' : '');
+
+    // Scorecard
+    $('score-section').hidden = false;
+    $('scorecard').innerHTML =
+      '<thead><tr><th>Hole</th><th>Strokes</th><th>Putts</th><th>Time</th></tr></thead><tbody>' +
+      r.holes.map(function (h) {
+        var first = r.shots[h.shots[0]], last = r.shots[h.shots[h.shots.length - 1]];
+        var t = first.startUnix && (last.endUnix || last.startUnix) ? fmtDur((last.endUnix || last.startUnix) - first.startUnix) : '—';
+        return '<tr tabindex="0" data-hole="' + h.hole + '"' + (h.hole === s.hole ? ' class="current"' : '') + '><td>' + h.hole + '</td><td>' + h.strokes +
+          (h.noGps ? ' <span class="meta" title="includes shots saved without GPS">(' + h.noGps + ' no GPS)</span>' : '') +
+          '</td><td>' + h.putts + '</td><td>' + t + '</td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td>Total</td><td>' + r.totalStrokes + '</td><td>' + r.totalPutts + '</td><td></td></tr></tfoot>';
+    Array.prototype.forEach.call($('scorecard').querySelectorAll('tbody tr'), function (tr) {
+      var go = function () { pause(); goToHole(+tr.dataset.hole); };
+      tr.onclick = go;
+      tr.onkeydown = function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+    });
+
+    // Clubs
+    $('club-section').hidden = false;
+    $('clubs').innerHTML =
+      '<thead><tr><th>Club</th><th>Shots</th><th>Avg</th><th>Max</th></tr></thead><tbody>' +
+      r.clubs.map(function (c) {
+        return '<tr' + (c.club === s.club ? ' class="current"' : '') + '><td>' + esc(c.club) + '</td><td>' + c.count + '</td><td>' +
+          (c.avg !== null ? Math.round(c.avg) : '—') + '</td><td>' + (c.max !== null ? c.max : '—') + '</td></tr>';
+      }).join('') +
+      '</tbody><tfoot><tr><td colspan="4" class="meta" style="font-weight:400;text-align:left">Distances in ' + esc(r.units) + ', from shots with a recorded landing.</td></tr></tfoot>';
+  }
+  function L_distance(a, b) { return ReplayParse.haversineM(a, b); }
+
+  // ---------- loading ----------
+  function load(text, name) {
+    var r;
+    try { r = ReplayParse.parse(text, name); }
+    catch (e) {
+      var msg = e.friendly ? e.message : 'Couldn\'t read this file: ' + e.message;
+      showMessage('error', (name ? name + ': ' : '') + msg, state.round ? $('messages') : $('empty-error'));
+      if (state.round) $('panel').scrollTop = 0;
+      return false;
+    }
+    pause(); state.token++; if (map) stopAnim();
+    clearMessages();
+    state.round = r; state.idx = 0; state.fileName = name || null;
+    $('empty').hidden = true;
+    r.warnings.forEach(function (w) { showMessage('warn', w); });
+    if (r.shots.every(function (s) { return !s.start; })) showMessage('warn', 'No shot in this round has a GPS position, so there\'s nothing to show on the map.');
+    $('hole-select').innerHTML = r.holes.map(function (h) { return '<option value="' + h.hole + '">Hole ' + h.hole + ' (' + h.strokes + ')</option>'; }).join('');
+    $('timeline').innerHTML = '';
+    if (map) {
+      map.invalidateSize();
+      buildLayers();
+      var b = allBounds(); if (b) map.fitBounds(b, { padding: [30, 30], animate: false });
+    }
+    goTo(0, { instant: true });
+    return true;
+  }
+  function loadSample() { load($('sample-round').textContent, 'sample-round.geojson (sample)'); }
+  function loadFile(file) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showMessage('error', file.name + ' is over 5 MB; that\'s not a shot tracker export.', state.round ? null : $('empty-error')); return; }
+    var fr = new FileReader();
+    fr.onload = function () { load(String(fr.result), file.name); };
+    fr.onerror = function () { showMessage('error', 'Couldn\'t read ' + file.name + '.', state.round ? null : $('empty-error')); };
+    fr.readAsText(file);
+  }
+
+  // ---------- wiring ----------
+  $('btn-sample').onclick = loadSample;
+  $('btn-open').onclick = function () { $('file').click(); };
+  document.querySelector('[data-action=open]').onclick = function () { $('file').click(); };
+  document.querySelector('[data-action=sample]').onclick = loadSample;
+  $('file').onchange = function () { loadFile(this.files[0]); this.value = ''; };
+  $('btn-prev').onclick = function () { step(-1); };
+  $('btn-next').onclick = function () { step(1); };
+  $('btn-play').onclick = toggle;
+  $('btn-overview').onclick = overview;
+  $('hole-select').onchange = function () { var h = +this.value; pause(); goToHole(h); }; // pause() re-syncs the select
+
+  var dragDepth = 0;
+  window.addEventListener('dragenter', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') !== -1) { dragDepth++; $('drop').classList.add('on'); } });
+  window.addEventListener('dragleave', function () { if (--dragDepth <= 0) { dragDepth = 0; $('drop').classList.remove('on'); } });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) {
+    e.preventDefault(); dragDepth = 0; $('drop').classList.remove('on');
+    if (e.dataTransfer && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!state.round || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+    var handled = true;
+    switch (e.key) {
+      case 'ArrowRight': step(1); break;
+      case 'ArrowLeft': step(-1); break;
+      case 'ArrowDown': case 'PageDown': stepHole(1); break;
+      case 'ArrowUp': case 'PageUp': stepHole(-1); break;
+      case ' ': case 'Spacebar':
+        if (tag === 'BUTTON' || tag === 'TR') { handled = false; break; } // let a focused button activate itself
+        toggle(); break;
+      case 'o': case 'O': overview(); break;
+      default: handled = false;
+    }
+    if (handled) e.preventDefault();
+  });
+
+  initMap();
+  syncControls();
+
+  // Deep links: #sample, #sample&shot=5, #sample&play
+  var hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if (hash.has('sample')) {
+    loadSample();
+    var n = parseInt(hash.get('shot'), 10);
+    if (n > 1) goTo(n - 1, { instant: true });
+    if (hash.has('play')) play();
+  }
+
+  window.replay = { state: state, load: load, loadSample: loadSample, goTo: goTo, play: play, pause: pause, overview: overview };
+})();
+</script>
+</body>
+</html>

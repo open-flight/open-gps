@@ -310,6 +310,9 @@ void undoLast() {
   // Tip: cut jumper JP2 on the Thing Plus so the rail defaults OFF and this
   // pin isn't fighting its 10k pull-up (~330 uA) all night.
   digitalWrite(PIN_QWIIC_EN, LOW);
+  // The gauge runs off the cell, so put back its default hibernate thresholds
+  // (sample every 45 s instead of 250 ms) while we're off.
+  if (fuelOk) { fuel.setHIBRTHibThr((uint8_t)0x80); fuel.setHIBRTActThr((uint8_t)0x30); }
   gpio_hold_en((gpio_num_t)PIN_QWIIC_EN);
   gpio_deep_sleep_hold_en();
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);  // only RESET (or the EN switch) wakes us
@@ -731,6 +734,9 @@ void setup() {
 
   input.begin(Wire);
   fuelOk = fuel.begin(Wire);
+  // By default the gauge hibernates whenever |charge rate| < ~27 %/hr, which is
+  // nearly always on this load, and then only samples every 45 s.
+  if (fuelOk) fuel.disableHibernate();
   bool fsOk = storage::begin();
   bool gpsOk = gps.begin(Wire);
 
@@ -750,6 +756,29 @@ void setup() {
   else if (!gpsOk) showToast("GPS not found!", 5000);
 }
 
+// The gauge's charge rate alone lags plug/unplug by minutes and reads ~0 when
+// plugged in near full, so watch the cell voltage for the step that USB power
+// causes, and only use the rate once it has had time to settle.
+void updateCharging(uint32_t now, float volts, float rate) {
+  static float baseline = 0;
+  static uint32_t lastStep = 0;
+  static bool stepSeen = false;
+  if (baseline == 0) baseline = volts;
+  float dv = volts - baseline;
+  if (dv > CHG_STEP_V || dv < -CHG_STEP_V) {
+    charging = dv > 0;
+    lastStep = now;
+    stepSeen = true;
+    baseline = volts;
+  } else {
+    baseline += (volts - baseline) * 0.1f;  // follow slow drift (charging, discharge)
+    if (!stepSeen || now - lastStep > CHG_SETTLE_MS) {
+      if (rate > CHG_RATE_ON) charging = true;
+      else if (rate < CHG_RATE_OFF) charging = false;
+    }
+  }
+}
+
 void loop() {
   static uint32_t lastRender = 0, lastFuel = 0;
   uint32_t now = millis();
@@ -765,10 +794,10 @@ void loop() {
   }
   if (scr == Scr::Result && now - resultAt > RESULT_SHOW_MS) go(Scr::Club);
 
-  if (fuelOk && (now - lastFuel > 10000 || lastFuel == 0)) {
+  if (fuelOk && (now - lastFuel >= FUEL_POLL_MS || lastFuel == 0)) {
     lastFuel = now;
     batteryPct = constrain((int)lround(fuel.getSOC()), 0, 100);
-    charging = fuel.getChangeRate() > 0.5f;
+    updateCharging(now, fuel.getVoltage(), fuel.getChangeRate());
   }
 
   if (dirty || now - lastRender >= UI_REFRESH_MS) {
