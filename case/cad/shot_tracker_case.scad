@@ -45,6 +45,7 @@ tp_sd_x  = 11.6;                             // microSD card centre (bottom side
 gps_l = 40.64; gps_w = 36.80;
 gps_holes = [[2.54,2.54],[38.10,2.54],[2.54,34.26],[38.10,34.26]];
 gps_sma_y = 25.65;
+gps_qwiic_y = 15.60;    // J4, right-angle Qwiic on the SMA edge (faces the top wall once rotated)
 
 // Qwiic OLED 1.3" (Eagle): body 35.56 x 25.40 + corner ears, holes 30.48 x 31.75
 oled_w = 35.56; oled_body_h = 25.40; oled_ear = 5.715;
@@ -68,6 +69,14 @@ batt_clear = 0.6;
 // flange 0-1.7 mm, thread 1.7-5.3 mm, tip at 6.0 mm. External antenna plugs in here.
 sma_edge_gap   = 0.6;   // GPS board edge to inside of top wall
 sma_port_d     = 11.0;  // wall opening: lets the plug's 8 mm coupling nut reach the thread
+
+// The GPS's top-edge Qwiic port (J4) sits right beside the SMA, but the SMA pins the board
+// 0.6 mm from the top wall, leaving no room for a plug. A pocket bulges out of the top
+// wall behind J4 instead, so the board (and the SMA) stay put.
+qwiic_gap      = 5.0;   // GPS board edge to the back of the pocket: plug + wire bend
+qwiic_pocket   = [8.0, 7.0];   // [width (X), height (Z)]; the plug is ~6 mm wide
+qwiic_pocket_dx = 0.6;  // shifted away from the SMA so the bulge clears the antenna plug's nut
+qwiic_pocket_wall = 1.2;
 
 // ---------- layout ----------
 W_in = 70;
@@ -96,6 +105,9 @@ gps_x0 = W_in - 1.0 - gps_w;      // GPS rotated 90 deg so SMA points +Y out the
 gps_y0 = H_in - sma_edge_gap - gps_l;   // SMA edge sits against the top wall
 sma_x = gps_x0 + (gps_w - gps_sma_y);
 sma_y = gps_y0 + gps_l;
+qwiic_x = gps_x0 + (gps_w - gps_qwiic_y);
+qwiic_pocket_cx = qwiic_x + qwiic_pocket_dx;
+qwiic_z0 = z_board_bot + 1.0;   // pocket floor, a little below the board's top face
 
 // front boards
 tw_cx = W_in/2;  tw_cy = 1 + tw_h/2;
@@ -183,8 +195,18 @@ module shell() {
             // (no switch cradle: the switch is glued into its wall slot so the plate drops in cleanly)
             // lanyard lug, top-left outer corner
             translate([r_out + 2, Ho - 0.5, Ds - 9]) lanyard_lug();
-            // zip-tie anchor beside the SMA port (strain relief for the antenna cable)
-            translate([wall + sma_x + sma_port_d/2 + 3, Ho - 0.5, z_board_bot + 0.8 - 4]) lanyard_lug();
+            // zip-tie anchor beside the SMA port (strain relief for the antenna cable).
+            // On the left of the port: the Qwiic pocket bulges out on the right.
+            translate([wall + sma_x - sma_port_d/2 - 3 - 10, Ho - 0.5, z_board_bot + 0.8 - 4]) lanyard_lug();
+            // bulge on the top wall that houses the Qwiic pocket; 45-degree underside so it
+            // prints back-down without supports
+            qb = [qwiic_pocket[0] + 2*qwiic_pocket_wall,
+                  wall + (sma_y + qwiic_gap - H_in) + qwiic_pocket_wall,
+                  qwiic_pocket[1] + 2*qwiic_pocket_wall];
+            translate([wall + qwiic_pocket_cx - qb[0]/2, Ho - wall - 0.01, qwiic_z0 - qwiic_pocket_wall]) hull() {
+                cube(qb);
+                translate([0, 0, -(qb[1] - wall)]) cube([qb[0], wall, 0.01]);
+            }
         }
         inner() {
             // lid screw holes + back counterbores
@@ -202,6 +224,9 @@ module shell() {
         }
         // left wall: slide-switch actuator slot
         translate([-1, wall + sw_y - sw_slot[0]/2, sw_z - sw_slot[1]/2]) cube([wall + 2, sw_slot[0], sw_slot[1]]);
+        // top wall: Qwiic plug pocket behind GPS J4
+        translate([wall + qwiic_pocket_cx - qwiic_pocket[0]/2, Ho - wall - 1, qwiic_z0])
+            cube([qwiic_pocket[0], 1 + wall + (sma_y + qwiic_gap - H_in), qwiic_pocket[1]]);
         // top wall: SMA antenna port
         translate([wall + sma_x, Ho - wall - 1, z_board_bot + 0.8]) rotate([-90,0,0])
             cylinder(d=sma_port_d, h=wall + 2);
@@ -391,6 +416,9 @@ module comp_plate() inner() {
         cube([gps_w, gps_l, 1.6]);
         translate([gps_w/2 - 6, gps_l/2 - 8, 1.6]) cube([12, 16, 2.4]);               // NEO-M9N
     }
+    // J4 Qwiic + mated plug (JST SH, ~6 x 3 mm) sticking out past the board edge
+    color("white") translate([qwiic_x - 3, sma_y - 4.2, z_board_bot + 1.6]) cube([6, 4.2, 3.0]);
+    color("white") translate([qwiic_x - 3, sma_y, z_board_bot + 1.6]) cube([6, qwiic_gap - 0.5, 3.0]);
     color("gold") translate([sma_x, sma_y, z_board_bot + 0.8]) rotate([-90,0,0]) cylinder(d=6.35, h=6.0);   // jack
     color("dimgray") translate([sma_x, sma_y + 1.8, z_board_bot + 0.8]) rotate([-90,0,0]) cylinder(d=9.2, h=9, $fn=6); // plug nut
     color("black") translate([sma_x, sma_y + 10.8, z_board_bot + 0.8]) rotate([-90,0,0]) cylinder(d=5, h=12);   // cable boot

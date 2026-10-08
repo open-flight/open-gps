@@ -20,7 +20,7 @@ The case is 74.4 x 74.4 x 31.6 mm (W x H x D). The GPS antenna plugs into an SMA
 
 Viewed from the front:
 
-- **Top wall:** the SMA antenna port. This is the GPS board's own edge-mount SMA jack, sitting 0.6 mm behind the wall. An 11 mm opening lets the plug's coupling nut reach the thread. Next to it are a zip-tie anchor (to strain-relieve the antenna cable) and a lanyard lug.
+- **Top wall:** the SMA antenna port. This is the GPS board's own edge-mount SMA jack, sitting 0.6 mm behind the wall. An 11 mm opening lets the plug's coupling nut reach the thread. To its left are a zip-tie anchor (to strain-relieve the antenna cable) and a lanyard lug. To its right, a small bulge holds a 5 mm pocket behind the GPS's top-edge Qwiic port, so a plug fits there.
 - **Front:** the OLED window with the Twist dial below it, and the **RESET button** between them. A printed plunger, standing 1 mm proud of the lid, presses the Thing Plus RESET button, which wakes the device from firmware power-off.
 - **Left side:** the **EN slide switch**, the hard power-off. It pulls the Thing Plus EN pin to GND, which disables the main 3.3 V regulator. Charging still works with it off.
 - **Bottom end:** USB-C (charging and programming) and a microSD slot, both on the Thing Plus.
@@ -70,7 +70,7 @@ Collision-check targets (`chk_shell`, `chk_lid`, `chk_plate`, …) intersect eac
 3. Solder the slide switch: the centre pin to the Thing Plus **EN** pin and one outer pin to **GND**. Slide = off pulls EN low. Hold the switch against the left wall with the actuator through the slot and fix it with hot glue (there's no cradle; the plate has a notch so it drops in past the switch).
 4. Put the battery in the shell. The lead exits toward the left side.
 5. Screw the Thing Plus and the GPS to the plate, then drop the plate in over the battery. Route the battery lead up through the left notch into the Thing Plus JST. Screw the plate down (3x M2.5 flat head).
-6. Connect Qwiic: Thing Plus → GPS → OLED → Twist. On the GPS, use the Qwiic port that faces the bottom of the case. The one facing the top wall has no room for a plug.
+6. Connect Qwiic: Thing Plus → GPS → OLED → Twist. Both GPS Qwiic ports are usable. The one facing the top wall plugs into the pocket beside the SMA port.
 7. Hook the lid's top tongues under the top wall, swing the bottom down, and fit the 2 M3 x 25 screws from the back.
 8. Screw the antenna onto the SMA port. Zip-tie the cable to the anchor next to the port so tugs don't load the GPS board's edge connector.
 
