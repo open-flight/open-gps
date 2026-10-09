@@ -114,30 +114,33 @@ The text below is updated to match.
 ![lineup v0.1, B, B2](renders/lineup_b2.png)
 *To scale, left to right: v0.1, B, B2.*
 
-**Outer size:** 66.0 x 78.5 x 33.8 mm, about 164 cm³, without the mount socket (the default). With it: 66.0 x 78.5 x 36.0 mm, about 174 cm³.
+**Outer size:** 62.4 x 82.3 x 33.8 mm, about 162 cm³, without the mount socket (the default). With it: 62.4 x 82.3 x 36.0 mm, about 172 cm³.
 
-**After the first print** the pouch didn't fit, so B2 now differs from the library values (A and B are unchanged):
-- **Pouch pocket:** 58 x 67 mm (+3 mm each way).
-- **Swell allowance:** 1.0 mm (+0.4).
+**After the first print** the pouch didn't fit. The user's cell is the reseller size from the v0.1 README: 49.2 mm wide by 68.8 mm long, plus a ~1.5 mm crimped seal flap at the far short end. It failed on **length**. B2 now overrides the library values (A and B are unchanged):
+- **Pouch pocket:** 51 x 71.5 mm, long side vertical, so the measured 49.2 x 70.3 mm (body + flap) has 0.6 mm clearance all round.
+- **Leads:** they leave the short end opposite the flap. That end is at the bottom (USB end), with a 4 mm bend zone below the pocket and a channel up the left margin to the plate notch beside the Thing Plus JST.
+- **Swell allowance:** 1.0 mm above a 6.4 mm nominal thickness. The thickness isn't measured yet; the listing says 5.6.
 - **Thing Plus standoffs:** 3.2 mm (+0.8), so its M2 screws get ≥ 4 mm of thread.
 
-The case grew +3 mm in width, +3 mm in height and +1.2 mm in depth (32.6 → 33.8). All screws are now M2 self-tappers; there are no heat-set inserts.
+All screws are M2 self-tappers; there are no heat-set inserts.
+
+A deliberate check, `chk_batt`, grows the measured pouch by 0.6 mm and confirms it clears the shell, plate and ribs. `chk_batt_old` confirms it would not fit the first print's 55 x 64 pocket: 1,147 mm³ sticks out at each end.
 
 **Mount socket is optional.** `mount_socket = false` (the default) drops the TwistLock socket and its boss. The pouch then sits 0.4 mm off the inner floor (`batt_lift`) instead of 2.6 mm on the boss, and the back edge radius tightens from 6 to 3 mm so the pouch corners clear it. All fit checks pass both ways. To get the socket back, set `mount_socket = true`. The cart and strap renders are made with it on. The table and layer stack below describe the version with the socket. Without it, every height above layer 1 drops by 2.2 mm.
 
 | | B | B2 | Change |
 |---|---|---|---|
-| Width | 79.4 | 66.0 | −13.4 mm |
-| Height | 80.4 | 78.5 | −1.9 mm |
+| Width | 79.4 | 62.4 | −17.0 mm |
+| Height | 80.4 | 82.3 | +1.9 mm |
 | Depth | 29.6 | 36.0 | +6.4 mm |
-| Footprint area | 6,384 mm² | 5,181 mm² | −19% |
-| Envelope volume | ~177 cm³ | ~174 cm³ | −2% |
+| Footprint area | 6,384 mm² | 5,136 mm² | −20% |
+| Envelope volume | ~177 cm³ | ~172 cm³ | −3% |
 
 **Layer stack.** Heights are above the inner floor; add 2.2 mm for the height above the outer back.
 
 | Layer | Part | z (mm) |
 |---|---|---|
-| 1 | 2 Ah pouch (58 x 67 x 6.4 pocket), resting on the TwistLock socket boss (socket recess is 3.6 deep, plus a 1.0 mm skin) | 2.6–9.0, plus 1.0 swell allowance |
+| 1 | 2 Ah pouch (51 x 71.5 x 6.4 pocket, leads at the bottom), resting on the TwistLock socket boss (socket recess is 3.6 deep, plus a 1.0 mm skin) | 2.6–9.0, plus 1.0 swell allowance |
 | 2 | Chassis plate | 10.0–11.6 |
 | 2 | Thing Plus, on 3.2 mm standoffs over its microSD socket. Left side, USB-C at the bottom end, plug keep-out against the left wall. | board 14.8–16.4; tallest part 18.6; plug keep-out to 19.6 |
 | 3 top | GPS. SMA edge 0.6 mm off the top wall, as in v0.1. | board 20.4–22.0; J4 to 25.0 |
@@ -146,19 +149,19 @@ The case grew +3 mm in width, +3 mm in height and +1.2 mm in depth (32.6 → 33.
 | 4 | Lid | inner 31.6; face 33.8 |
 
 **What sets the size:**
-- **Width (61.6 mm inside)** is the pouch pocket (58) plus 1.8 mm per side, so the plan corners can have an 8.5 mm inside radius.
-- **Height (74.1 mm inside)** is now set by the pouch: 67 plus 3.55 mm at each end for the corners. The RESET-plus-GPS column alone needs 71.1. That column works like this: the Thing Plus RESET is fixed 28.2 mm from the USB end, its plunger needs a straight path to the face, so the GPS has to start at least at y 29.9; add 40.6 mm of GPS and the 0.6 mm SMA gap.
+- **Width (58.0 mm inside)** is set by the front stack, not the pouch (51 + 3.6 = 54.6). The Twist sits just right of the RESET plunger, and its bottom-right corner has to fit inside the 8.5 mm plan corner. At 57.5 mm it already collides (`chk`, 0.10 mm³).
+- **Height (77.9 mm inside)** is set by the pouch: 4 mm lead-bend zone + 71.5 mm pocket + 2.4 mm to the top wall for the corners. The RESET-plus-GPS column alone needs 71.1. That column works like this: the Thing Plus RESET is fixed 28.2 mm from the USB end, its plunger needs a straight path to the face, so the GPS has to start at least at y 29.9; add 40.6 mm of GPS and the 0.6 mm SMA gap.
 
   The GPS stays pinned 0.6 mm from the top wall, so the extra 3 mm opens up between the plunger and the GPS.
 
 **Checking the proposed layering against the numbers:**
-- **"The battery sets the footprint."** With the enlarged pocket, yes: both width and height.
+- **"The battery sets the footprint."** For the height, yes (the 70.3 mm pouch plus leads). The width is the front stack's.
 - **Thing Plus on the left, USB-C at the bottom.** Yes. Its plug keep-out faces the left wall.
 - **GPS SMA against the top wall.** Yes, at 0.6 mm as in v0.1. I checked the jack that hangs 2.4 mm below the board at its axis: it sits at y ≥ 70.5, beyond the Thing Plus's far end at 60.9, and above the plate.
   J4 can't be used with only 0.6 mm to the wall, so the design uses the GPS's other Qwiic port.
-- **Twist alone in the bottom zone.** Yes. The Twist sits 1.35 mm right of the plunger pin, and its lid bosses clear the plunger's guide tube by 0.5 mm. The GPS sits 3.6 mm above the pin.
+- **Twist alone in the bottom zone.** Yes. The Twist sits 1.35 mm right of the plunger pin, and its lid bosses clear the plunger's guide tube by 0.5 mm. The GPS sits 7.4 mm above the pin.
   The two zones share the depth as you proposed: the encoder top and the OLED glass top both sit at the lid's inner face.
-- **Target ~62 x 70.** The first layered version came out at 63 x 75.5, the extra height being the RESET path. With the enlarged pocket it is now 66 x 78.5, set by the pouch.
+- **Target ~62 x 70.** The first layered version came out at 63 x 75.5, the extra height being the RESET path. With the measured 70 mm-long pouch it is now 62.4 x 82.3: the width is the front stack's, the height the pouch's.
 
   One option to cut it, which I didn't model: rotate the GPS so the SMA comes out of the upper right side. That should save roughly 3 mm of height (38.4 mm of GPS instead of 41.2 in that column), at the cost of the antenna cable leaving from the side.
 
@@ -225,9 +228,9 @@ The default is **without the mount socket** (`mount_socket = false`). To print t
 
 | STL | Orientation | Size (mm) | Notes |
 |---|---|---|---|
-| `back_shell.stl` | Back down | 66.0 x 78.5 x 22.8 | Pouch tray, plate ledges, wrist-strap block, side-screw countersinks |
-| `lid.stl` | Face down | 66.0 x 78.5 x 22.2 | Face, OLED and Twist bosses, RESET guide tube, locating lip, 4 tabs (3 with M2 pilots), port-bay tooth |
-| `plate.stl` | Flat | 60.8 x 73.3 x 10.4 | Thing Plus standoffs and far-end rest, 3 GPS posts, switch shelf |
+| `back_shell.stl` | Back down | 62.4 x 82.3 x 22.8 | Pouch tray, plate ledges, wrist-strap block, side-screw countersinks |
+| `lid.stl` | Face down | 62.4 x 82.3 x 22.2 | Face, OLED and Twist bosses, RESET guide tube, locating lip, 4 tabs (3 with M2 pilots), port-bay tooth |
+| `plate.stl` | Flat | 57.2 x 77.1 x 10.4 | Thing Plus standoffs and far-end rest, 3 GPS posts, switch shelf |
 | `knob.stl` | Upright | 19.2 x 19.2 x 12.0 | v0.1's `knob()`, unchanged |
 | `plunger.stl` | Tip down | 3.4 x 3.4 x 15.8 | RESET plunger |
 
@@ -235,13 +238,13 @@ Each STL is a single solid in which every edge has exactly two faces, counted wi
 
 | STL | Edges | Faces per edge |
 |---|---|---|
-| back_shell | 4428 | all 2 |
-| lid | 6390 | all 2 |
-| plate | 2286 | all 2 |
+| back_shell | 4596 | all 2 |
+| lid | 6498 | all 2 |
+| plate | 2274 | all 2 |
 | knob | 2586 | all 2 |
 | plunger | 585 | all 2 |
 
-All five also slice in Bambu Studio 02.08.02.61's CLI (`--slice 0`) with return code 0 and no warnings. That was with the CLI's default printer and filament profile, not an X2D/PETG profile. Default-profile times: back shell 2 h 51 min, lid 2 h 10 min, plate 1 h 07 min, knob 16 min, plunger 2 min (the slicer added a brim).
+All five also slice in Bambu Studio 02.08.02.61's CLI (`--slice 0`) with return code 0 and no warnings. That was with the CLI's default printer and filament profile, not an X2D/PETG profile. Default-profile times: back shell 2 h 54 min, lid 2 h 08 min, plate 1 h 07 min, knob 16 min, plunger 2 min (the slicer added a brim).
 
 ### Print settings (Bambu X2D, PETG)
 
@@ -263,7 +266,7 @@ All screws are **M2 self-tapping into PETG**: 1.6 mm pilots, 2.4 mm clearance ho
 | 3 | M2 x 6 pan head | GPS to the three plate posts | 4.4 mm |
 | 4 | M2 x 6 pan head | Twist to the lid bosses, from behind | 4.4 mm |
 | 4 | M2 x 4 pan head | OLED ears to the lid bosses | 2.4 mm |
-| 2 | M2 x 6 pan head | Plate to the bottom and top ledges | 4.4 mm |
+| 2 | M2 x 6 pan head | Plate to the left and right side ledges | 4.4 mm |
 
 **Material around and under the pilots.**
 - **Thread length:** every screw gets at least 4 mm of thread except the OLED's.
@@ -294,11 +297,11 @@ Every screw length is set so the screw **can't reach a skin, a board or the pouc
 
   The lip, tabs and tooth overlap the lid by 0.3 mm. No feature touches another edge-to-edge.
 - **Plate.** v0.1 screws its plate onto three floor pillars, but B2 has no free floor beside the pouch. Instead the plate:
-  - rests on ledges along the bottom wall, the top wall and the right wall;
-  - is held by two M2 x 6 pan screws into the bottom and top ledges;
+  - rests on ledges along the right wall, the left wall above y 28, and the top wall;
+  - is held by two M2 x 6 pan screws into the side ledges (the narrower pouch leaves 3.5 mm side margins);
   - is clamped down by all four lid tabs.
 
-  There's no left ledge, because the pouch lead runs up the 1.8 mm left margin to the plate's lead notch (v0.1's notch position, under the Thing Plus JST).
+  There's no bottom ledge (the lead-bend zone is there) and no left ledge below y 28. The pouch leads bend along the bottom and run up the left margin to the plate's lead notch, under the Thing Plus JST.
 
   The Qwiic cables don't cross the plate. The Thing Plus, GPS, OLED and Twist are all above it, and the cables run up the left plug channel.
 - **Twist.** It hangs from four lid bosses and its encoder bears on the lid, as in v0.1. It can't sit on plate standoffs, because its left-hand holes are over the Thing Plus.
@@ -343,7 +346,10 @@ These all run in the `.scad` file, and every one exports empty or zero-volume, b
 | OLED screw M2 x 6 | `chk_out` | 7.2 mm³ |
 | Thing Plus screw M2 x 8 (reaches the pouch) | `chk_comp` | 9.6 mm³ |
 | Side screw M2 x 12 | `chk_comp` | 3.9 mm³ |
-| The real 58 x 67 pouch in the old 58.6 mm-wide case | `chk` | 453 mm³ |
+| Pocket 1 mm short (70.5) for the measured pouch | `chk_batt` | 42 mm³ |
+| Measured pouch in the first print's 55 x 64 pocket | `chk_batt_old` | 2,294 mm³ (meant to be non-empty) |
+| No lead-bend zone (`batt_lead` 0.5) | `chk_comp` | 27 mm³ |
+| Inside width 57.5 (front stack) | `chk` | 0.10 mm³ |
 
 The Twist would now also take an M2 x 8 without reaching the skin, because the M2 pilot is thinner and the lean is 4.9 mm. M2 x 6 is plenty, so I kept it.
 
@@ -355,7 +361,7 @@ The Twist would now also take an M2 x 8 without reaching the skin, because the M
 2. Screw the OLED (glass against the lid) with 4 x M2 x 4.
 3. Screw the Twist with 4 x M2 x 6 from behind, encoder through its hole. Connect Qwiic OLED → Twist.
 4. Drop the RESET plunger into its tube from inside. Its collar keeps it from falling out the front.
-5. **Back shell.** Lay the pouch in, with its lead running up the left margin.
+5. **Back shell.** Lay the pouch in, long side vertical, seal flap at the top and leads at the bottom. Bend the leads along the bottom and up the left margin.
 6. **Plate.** Screw the Thing Plus (2 x M2 x 6) and the GPS (3 x M2 x 6) to the plate.
 7. Solder the EN switch to the Thing Plus EN and GND pins. Connect Qwiic Thing Plus → GPS.
 8. Drop the plate in, feeding the pouch lead up through the left notch to the Thing Plus JST. Screw it down with 2 x M2 x 6.
@@ -369,7 +375,8 @@ The Twist would now also take an M2 x 8 without reaching the skin, because the M
 2. **Thing Plus parts under the Twist.** In Thing Plus board coordinates, that's the strip 15.7–22.9 mm across and 0–25 mm from the USB end. The Twist PCB and its two left screw heads sit 0.65 mm above a 3.4 mm part height. Anything taller there collides.
 3. **The GPS's other Qwiic port.** The top-edge J4 is unusable, 0.6 mm from the wall. Where the other port sits decides the GPS-to-OLED cable route.
 4. **3-post GPS mounting.** The fourth GPS hole is over the Thing Plus and gets no post. Check the GPS doesn't rock. If it does, a dab of foam or hot glue on its corner over the Thing Plus fixes it.
-5. **The pouch.** Check it fits the 58 x 67 x 6.4 pocket (enlarged after the first print, with 1.0 mm of swell room above it). Check its lead exits where it can run up the left margin; there's 1.8 mm between the pouch and the left wall.
+5. **The pouch.** The plan size is measured (49.2 x 68.8 + 1.5 mm flap, in a 51 x 71.5 pocket). **The thickness is still unmeasured:** 6.4 mm nominal plus 1.0 mm swell room is assumed (the listing says 5.6), so please confirm it.
+   The leads must exit the bottom short edge somewhere between x 8.5 and 38 mm from the left inside wall, i.e. not under the wrist-strap block at the bottom right. If they exit at the right-hand corner, move `lan_x`. There's 3.5 mm between the pouch and the left wall for them to run up to the notch.
 6. As in v0.1, also check:
    - the OLED glass and tape thickness (1.6 mm);
    - the encoder body (12.4 x 13.4 x 7.8) and shaft length (10 mm above the body);
@@ -421,8 +428,8 @@ Side views: [A on the cart](renders/a_grip_cart_side.png), [B on the cart](rende
 
 | | v0.1 | **A Grip** | **B Stone** | **B2 Stone, layered** |
 |---|---|---|---|
-| Outer size (mm) | 74.4 x 78 x 31.6 | 78.6 (62.6 at the handle) x 138.3 x 22.8 (+3.5 pad) | 79.4 x 80.4 x 29.6 | 66.0 x 78.5 x 33.8 (36.0 with the socket) |
-| Envelope | ~175 cm³ | ~223 cm³ | ~177 cm³ | ~164 cm³ (174 with the socket) |
+| Outer size (mm) | 74.4 x 78 x 31.6 | 78.6 (62.6 at the handle) x 138.3 x 22.8 (+3.5 pad) | 79.4 x 80.4 x 29.6 | 62.4 x 82.3 x 33.8 (36.0 with the socket) |
+| Envelope | ~175 cm³ | ~223 cm³ | ~177 cm³ | ~162 cm³ (172 with the socket) |
 | Internal layout | Stacked (plate over the pouch, Twist over the boards) | Two zones, side by side | Stacked, Twist beside the GPS | 4 layers; GPS + OLED and Twist share layer 3 |
 | One-handed use | Box held flat, dial centred | **Best:** remote-style grip, thumb dial, screen never covered | Good: palm stone, right-thumb dial | Good: smaller palm stone, right-thumb dial, leaning sides |
 | Mounted | None (flat back) | Good: socket in the head, handle hangs | **Best:** compact and centred | **Best:** smallest face area |
@@ -458,7 +465,7 @@ You asked for a better handheld that also works mounted, and the Grip is the onl
 |---|---|
 | `concept_a_grip.scad` | Concept A. `part` = `assembly`, `exploded`, `cutaway`, `cart`, `strap`, `outer`, or the checks `chk`, `chk_out`, `chk_pad`, `chk_cart`. |
 | `concept_b_stone.scad` | Concept B. `part` = `assembly`, `exploded`, `cutaway`, `cart`, `strap`, or the checks `chk`, `chk_out`, `chk_plate`, `chk_cart`. |
-| `concept_b2_stone.scad` | Concept B2, print-ready. Views: `assembly`, `exploded`, `cutaway`, `side`, `cart`, `strap`. Print parts: `back_shell`, `lid`, `plate`, `knob`, `plunger`. Checks: `chk`, `chk_out`, `chk_comp`, `chk_plate`, `chk_pilot`, `chk_cart`. |
+| `concept_b2_stone.scad` | Concept B2, print-ready. Views: `assembly`, `exploded`, `cutaway`, `side`, `cart`, `strap`. Print parts: `back_shell`, `lid`, `plate`, `knob`, `plunger`. Checks: `chk`, `chk_out`, `chk_comp`, `chk_plate`, `chk_pilot`, `chk_cart`, `chk_batt` (the measured pouch fits), `chk_batt_old` (it does not fit the old pocket; non-empty by design). |
 | `export_b2.sh` | Exports B2's print parts to `stl_b2/`. |
 | `stl_b2/` | B2 print STLs, in print orientation. |
 | `mount_kit.scad` | The TwistLock kit (`part="kit"`) and the socket and puck engagement detail (`part="socket"`). |

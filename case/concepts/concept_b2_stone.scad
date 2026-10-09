@@ -27,7 +27,7 @@
 //
 //  part = views : "assembly" | "exploded" | "cutaway" | "side" | "cart" | "strap"
 //         print : "back_shell" | "lid" | "plate" | "knob" | "plunger"   (print orientation)
-//         checks: "chk" | "chk_out" | "chk_comp" | "chk_plate" | "chk_pilot" | "chk_cart"
+//         checks: "chk" | "chk_out" | "chk_comp" | "chk_plate" | "chk_pilot" | "chk_cart" | "chk_batt" | "chk_batt_old" (should be non-empty)
 // =====================================================================
 include <lib/components.scad>
 include <lib/shape.scad>
@@ -35,7 +35,13 @@ include <lib/mount.scad>
 use <../cad/shot_tracker_case.scad>      // v0.1's knob() for the printed knob
 
 // ---------- B2-only overrides of lib/components.scad (A and B keep the library values) ----------
-batt        = [58, 67, 6.4];  // pouch pocket +3 mm both ways after the first print (the 55 x 64 pocket was too tight)
+batt        = [51, 71.5, 6.4]; // pouch pocket. The user's cell measures 49.2 x 68.8 mm plus a ~1.5 mm seal flap at the
+                              // top end (the reseller size in the v0.1 README): 49.2 x 70.3 + 0.6 mm all round, rounded up.
+                              // Long side vertical, leads at the BOTTOM (USB) end. Thickness unmeasured: 6.4 nominal.
+real_pouch  = [49.2, 70.3, 6.4];   // measured body + flap, for chk_batt / chk_batt_old
+batt_lead   = 4.0;            // free space below the pocket for the leads to bend (leads exit the bottom short edge)
+batt_top    = 2.4;            // pocket to top wall: what the 8.5 mm plan corners need with 3.5 mm side margins
+W_front     = 58.0;           // narrowest inside width the front stack allows (RESET + Twist row, Twist in the corner)
 batt_swell  = 1.0;            // +0.4 over the library value: cells swell
 tp_standoff = 3.2;            // +0.8 so the Thing Plus M2 screws get >= 4 mm of thread in standoff + plate
 
@@ -75,19 +81,18 @@ z_tw    = Z_in - twist_top;                         // layer 3 bottom: encoder b
 btn_top = z_board + 1.6 + 2.5;                      // RESET tact switch top
 
 // ---------- plan layout ----------
-W_in    = batt[0] + 2*1.8;                          // pouch + corner margin
+W_in    = max(batt[0] + 2*1.8, W_front);            // pouch + corner margin, or the front stack (it is the front stack now)
 tp_x0   = 1.5 + tp_keepout;                         // plug keep-out against the left wall
 tp_y0   = 1.0 + tp_usb_overhang;
 rst_p   = [tp_x0 + tp_rst[0], tp_y0 + tp_rst[1]];
 tw_c    = [rst_p[0] + 2.4 + tw_w/2, 2.0 + tw_h/2];  // Twist just right of the plunger, lid bosses clear of its tube
 gps_y0_min = rst_p[1] + rst_pin_d/2 + 0.6;          // GPS can't start lower than just above the plunger
-batt_end   = 3.55;                                  // pouch-to-end-wall margin the 8.5 mm corners need
-H_in    = max(gps_y0_min + gps_l + 0.6, batt[1] + 2*batt_end);   // RESET + GPS column, or the pouch
+H_in    = max(gps_y0_min + gps_l + 0.6, batt_lead + batt[1] + batt_top);   // RESET + GPS column, or lead zone + pouch
 gps_y0  = H_in - 0.6 - gps_l;                       // SMA edge 0.6 off the top wall (v0.1 value)
 gps_x0  = W_in/2 - gps_w/2;
 oled_c  = [W_in/2, gps_y0 + gps_l/2 + 0.3];
 batt_x0 = W_in/2 - batt[0]/2;
-batt_y0 = H_in/2 - batt[1]/2;
+batt_y0 = batt_lead;                                // pocket starts above the lead-bend zone
 usb_x   = tp_x0 + tp_usb_x;
 sd_x    = tp_x0 + tp_sd_x;
 usb_z   = z_board + 1.6 + 1.6;
@@ -126,9 +131,10 @@ gps_holes_w  = [for (h = gps_holes) let (p = [gps_x0 + h[0], gps_y0 + h[1]])
                 if (!(p[0] < tp_x0 + tp_w + 3 && p[1] < tp_y0 + tp_l + 3)) p];   // 3 posts; the 4th hole sits over the TP
 tw_holes_w   = [for (sx = [-1, 1], sy = [-1, 1]) [tw_c[0] + sx*tw_holes[0]/2, tw_c[1] + sy*tw_holes[1]/2]];
 oled_holes_w = [for (sx = [-1, 1], sy = [-1, 1]) [oled_c[0] + sx*oled_holes[0]/2, oled_c[1] + sy*oled_holes[1]/2]];
-plate_scr    = [[33, 2.0], [30, H_in - 2.0]];        // plate -> bottom / top ledges
+plate_scr    = [[1.9, 40], [W_in - 1.9, 30]];        // plate -> left / right side ledges (the pouch leaves 3.5 mm margins)
 lan_x        = 45;                                   // wrist-strap passage, bottom end
-ledge_d      = 3.2;                                  // bottom / top ledge depth (pouch is 3.55 from those walls)
+ledge_d      = batt_top - 0.35;                       // top ledge depth (no bottom ledge: the lead-bend zone is there)
+lead_x       = [8.5, 38];                            // lead-bend zone along the bottom end (left of the wrist-strap block)
 
 // screw lengths (mm, under-head)
 L_tp = 6; L_gps = 6; L_tw = 6; L_oled = 4; L_plate = 6; L_side = 8;   // L_oled: only glass + skin above the ears (2.4 mm of thread)
@@ -207,10 +213,11 @@ module inner_features() {
     // pouch corner ribs + floor ribs
     for (sx = [0, 1], sy = [0, 1]) translate([batt_x0 - 1.2 + sx*(batt[0] + 1.4), batt_y0 - 1.2 + sy*(batt[1] + 1.4), -1]) cube([1.0, 1.0, z_batt + 4]);
     if (mount_socket) for (x = [batt_x0 + 8, batt_x0 + batt[0] - 8]) translate([x - 0.6, batt_y0 + 4, -1]) cube([1.2, batt[1] - 8, z_batt + 1]);
-    // plate ledges: right side wall (1.4 deep) and both end walls (3.2 deep), up to the plate.
-    // No left ledge: the pouch lead runs up the 1.8 mm left margin to the plate notch.
-    translate([W_in - 1.4, 12, -1]) cube([2.4, H_in - 24, z_plate + 1]);
-    translate([10, -1, -1]) cube([W_in - 20, ledge_d + 1, z_plate + 1]);
+    // plate ledges, up to the plate: right side, left side above the lead channel, top end.
+    // No bottom ledge (lead-bend zone) and no left ledge below y 28 (the leads run up there to the notch).
+    m = batt_x0 - 0.4;                                    // side ledge depth: 0.4 short of the pocket
+    translate([W_in - m, 10, -1]) cube([m + 1, H_in - 20, z_plate + 1]);
+    translate([-1, 28, -1]) cube([m + 1, H_in - 38, z_plate + 1]);
     translate([10, H_in - ledge_d, -1]) cube([W_in - 20, ledge_d + 1, z_plate + 1]);
     // wrist-strap block: hangs off the bottom wall, 45-degree underside for the back-down print
     translate([lan_x - 6, 0, 0]) hull() {
@@ -261,19 +268,20 @@ module tab(t) {
     x0 = t[0] == 0 ? lip_clr : W_in - tab_w;
     x1 = t[0] == 0 ? tab_w : W_in - lip_clr;
     y0 = t[1] - t[2]; y1 = t[1] + t[2];
-    // right-lower tab sits under the Twist corner: keep x < 55 below z_tw - 0.4, 45-degree top
+    // right-lower tab sits under the Twist corner: keep x < tw_r below z_tw - 0.4, 45-degree top
+    tw_r = tw_c[0] + tw_w/2 + 0.3;
     low = (t[0] == 1 && t[1] < 30);
     // above the rim the tab reaches into the lid wall so it fuses with it
-    xo0 = t[0] == 0 ? -wall - 1 : (low ? 55 : x0);  xo1 = t[0] == 0 ? x1 : W_in + wall + 1;
+    xo0 = t[0] == 0 ? -wall - 1 : (low ? tw_r : x0);  xo1 = t[0] == 0 ? x1 : W_in + wall + 1;
     intersection() { in_lid(); translate([xo0, y0, zs - 0.01]) cube([xo1 - xo0, y1 - y0, Z_in - zs + 1]); }
     intersection() {
         intersection() { body(wall + lip_clr); below(zs + lip_ov); }   // overlaps the lid by lip_ov
         if (!low) translate([x0, y0, tab_z0]) cube([x1 - x0, y1 - y0, Z_in - tab_z0 + 1]);
         else union() {
-            translate([55, y0, tab_z0]) cube([x1 - 55, y1 - y0, Z_in - tab_z0 + 1]);
+            translate([tw_r, y0, tab_z0]) cube([x1 - tw_r, y1 - y0, Z_in - tab_z0 + 1]);
             hull() {
-                translate([x0, y0, tab_z0]) cube([55 - x0 + 0.01, y1 - y0, (z_tw - 0.4 - (55 - x0)) - tab_z0]);
-                translate([54.99, y0, tab_z0]) cube([0.01, y1 - y0, z_tw - 0.4 - tab_z0]);
+                translate([x0, y0, tab_z0]) cube([tw_r - x0 + 0.01, y1 - y0, (z_tw - 0.4 - (tw_r - x0)) - tab_z0]);
+                translate([tw_r - 0.01, y0, tab_z0]) cube([0.01, y1 - y0, z_tw - 0.4 - tab_z0]);
             }
         }
     }
@@ -316,7 +324,7 @@ module chassis() difference() {
         for (p = gps_holes_w) translate([p[0], p[1], z_plate]) cylinder(d = 5.4, h = z_gps - z_plate);
         translate([W_in - 0.4 - sw_body[0] - 0.6, sw_y - 6, z_plate]) cube([sw_body[0] + 0.6, 12, sw_z - sw_body[2]/2 - z_plate]);   // switch shelf (glue)
     }
-    translate([-2, 12, z_plate - 1]) cube([5, 14, 5]);                                  // battery lead pass-through
+    translate([-2, 12, z_plate - 1]) cube([batt_x0 + 2 - 0.1, 14, 5]);                // battery lead pass-through, up to the TP JST
     translate([lan_x - 6.4, -2, z_plate - 1]) cube([12.8, 7.6, 5]);                     // wrist-strap block
     for (p = plate_scr) translate([p[0], p[1], z_plate - 1]) cylinder(d = m2_clear, h = 5, $fn = 16);
     pilots();
@@ -380,12 +388,20 @@ module comps_lid() {
 knob_z = zf + 2;                                    // knob clears the face by 2 mm (as v0.1)
 module dial_knob() translate([tw_c[0], tw_c[1], knob_z]) color("#f4f4f4") knob();
 module keep_plunger() intersection() { plunger(); below(zf); }
+// pouch leads: bend zone below the pocket, then up the left margin to the plate notch
+module keep_leads() {
+    translate([lead_x[0], 0.4, z_batt]) cube([lead_x[1] - lead_x[0], batt_lead - 0.4, batt[2] + batt_swell]);
+    translate([0.4, 8.5, z_batt]) cube([batt_x0 - 0.8, 26 - 8.5, batt[2] + batt_swell]);
+}
+module real_pouch_at(grow = 0) translate([W_in/2 - real_pouch[0]/2 - grow, batt_y0 + (batt[1] - real_pouch[1])/2 - grow, z_batt - (grow > 0 ? 0 : 0)])
+    cube([real_pouch[0] + 2*grow, real_pouch[1] + 2*grow, real_pouch[2] + batt_swell]);
 module keep_all() {
     place_tp() keep_tp();
     place_gps() keep_gps();
     place_oled() keep_oled();
     place_tw() keep_twist();
     place_batt() keep_batt();
+    keep_leads();
     place_sw() translate([0, -sw_body[1]/2, -sw_body[2]/2]) cube(sw_body);
     keep_plunger();
 }
@@ -396,7 +412,7 @@ module keep_i(i) {
     if (i == 1) place_gps() keep_gps();
     if (i == 2) place_oled() keep_oled();
     if (i == 3) place_tw() keep_twist();
-    if (i == 4) place_batt() keep_batt();
+    if (i == 4) { place_batt() keep_batt(); keep_leads(); }
     if (i == 5) place_sw() translate([0, -sw_body[1]/2, -sw_body[2]/2]) cube(sw_body);
     if (i == 6) keep_plunger();
     if (i == 7) chassis();
@@ -470,6 +486,10 @@ else if (part == "chk") intersection() { union() { shell_solid(); chassis(); } k
 else if (part == "chk_comp") {   // braces matter: without them the next "else" binds to the inner if
     for (i = [0 : n_keep - 2], j = [i + 1 : n_keep - 1]) if (!is_exempt(i, j)) intersection() { keep_i(i); keep_i(j); }
 }
+// the measured pouch (49.2 x 70.3) grown by 0.6 all round must clear the shell, plate and ribs
+else if (part == "chk_batt") intersection() { real_pouch_at(0.6); union() { shell_solid(); chassis(); } }
+// ...and must NOT fit the first print's 55 x 64 pocket (this should be non-empty)
+else if (part == "chk_batt_old") difference() { real_pouch_at(0); translate([W_in/2 - 55/2, batt_y0 + (batt[1] - 64)/2, z_batt - 1]) cube([55, 64, 20]); }
 else if (part == "chk_plate") intersection() { chassis(); shell_solid(); }
 else if (part == "chk_out") difference() { union() { keep_all(); hw_all(); } body(0); }
 else if (part == "chk_pilot") intersection() {                                               // pilots vs outer skin, pouch
